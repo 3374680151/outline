@@ -267,7 +267,7 @@ const Wrapper = styled.div<{
   align-items: flex-start;
   background: ${s("modalBackground")};
   box-shadow: ${s("modalShadow")};
-  ${borderRadius(10)}
+  ${borderRadius(12)}
   outline: none;
 
   ${NudeButton} {
