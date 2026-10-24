@@ -17,7 +17,7 @@ import {
 export const MAX_AVATAR_DISPLAY = 6;
 
 /** Height of the app's fixed header in pixels. */
-export const HEADER_HEIGHT = 56;
+export const HEADER_HEIGHT = 52;
 
 /** Minimum size of touch targets on mobile in pixels, from Apple's guidelines. */
 export const MOBILE_TOUCH_TARGET = 44;

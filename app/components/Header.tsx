@@ -367,8 +367,8 @@ const Wrapper = styled(Flex)<WrapperProps>`
   `};
 
   ${breakpoint("tablet")`
-    padding: 12px;
-    padding-inline-end: ${endPadding(12)};
+    padding: 9px 16px;
+    padding-inline-end: ${endPadding(16)};
     ${(props: WrapperProps) => props.$insetTitleAdjust && `padding-left: 64px;`}
     `};
 `;
