@@ -314,14 +314,14 @@ const Link = styled.a<{
   text-overflow: ellipsis;
   font-weight: 475;
   padding: ${isMobile() ? 12 : 6}px 16px;
-  border-radius: 4px;
-  min-height: 30px;
+  border-radius: 6px;
+  min-height: 32px;
   user-select: none;
   white-space: nowrap;
   background: var(--background);
   color: ${(props) =>
     props.$isActiveDrop ? props.theme.white : props.theme.sidebarText};
-  font-size: 16px;
+  font-size: 14px;
   cursor: var(--pointer);
   overflow: hidden;
   border: 0;
@@ -343,7 +343,7 @@ const Link = styled.a<{
         position: absolute;
         inset: 0;
         pointer-events: none;
-        border-radius: 4px;
+        border-radius: 6px;
         border: 1.5px dashed ${props.theme.sidebarDraftBorder};
       }
     `}
@@ -365,7 +365,7 @@ const Link = styled.a<{
   }
 
   ${breakpoint("tablet")`
-    padding-block: 3px;
+    padding-block: 4px;
     padding-inline: 12px 8px;
     font-size: 14px;
   `}
