@@ -205,10 +205,10 @@ const Output = styled.div`
   white-space: pre-wrap;
   min-height: 40vh;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: ${s("backgroundSecondary")};
   color: ${s("text")};
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
 `;
 

@@ -444,26 +444,26 @@ const diffStyle = (props: Props) => css`
   .${EditorStyleHelper.diffModification}:not([class^="component-"]),
   .${EditorStyleHelper.diffModification} > * {
     color: ${props.theme.text};
-    background-color: ${transparentize(0.7, "#FFA500")};
+    background-color: ${transparentize(0.7, props.theme.warning)};
     text-decoration: none;
 
     &.${EditorStyleHelper.diffCurrentChange} {
-      outline-color: ${lighten(0.1, "#FFA500")};
-      background-color: ${transparentize(0.5, "#FFA500")};
-      animation: ${pulse(transparentize(0.5, "#FFA500"))} 150ms 1;
+      outline-color: ${lighten(0.1, props.theme.warning)};
+      background-color: ${transparentize(0.5, props.theme.warning)};
+      animation: ${pulse(transparentize(0.5, props.theme.warning))} 150ms 1;
     }
   }
 
   .${EditorStyleHelper.diffNodeModification} {
-    background-color: ${transparentize(0.7, "#FFA500")};
+    background-color: ${transparentize(0.7, props.theme.warning)};
 
     &[class*="component-"] {
-      outline: 4px solid ${transparentize(0.5, "#FFA500")};
+      outline: 4px solid ${transparentize(0.5, props.theme.warning)};
     }
 
     td,
     th {
-      border-color: ${transparentize(0.5, "#FFA500")};
+      border-color: ${transparentize(0.5, props.theme.warning)};
     }
   }
 
@@ -476,7 +476,7 @@ const diffStyle = (props: Props) => css`
 
   td.${EditorStyleHelper.diffNodeModification},
   th.${EditorStyleHelper.diffNodeModification} {
-    border-color: ${transparentize(0.5, "#FFA500")};
+    border-color: ${transparentize(0.5, props.theme.warning)};
   }
 `;
 

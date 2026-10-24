@@ -61,7 +61,7 @@ export const Card = styled.div`
 
 const Name = styled(Text)`
   margin: 0 0 -4px;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: ${s("text")};
   ${ellipsis()}

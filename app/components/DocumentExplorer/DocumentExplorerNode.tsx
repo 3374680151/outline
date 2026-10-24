@@ -113,7 +113,7 @@ export const Node = styled.span<{
   display: flex;
   user-select: none;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 14px;
   width: ${(props) => props.style.width};
   color: ${s("text")};
   cursor: var(--pointer);

@@ -456,7 +456,7 @@ export const Bubble = styled(Flex)<{
   }
 
   ${breakpoint("tablet")`
-    font-size: 15px;
+    font-size: 14px;
   `}
 `;
 
