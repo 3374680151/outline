@@ -746,10 +746,11 @@ const noticeStyle = () => css`
 
 const style = (props: Props) => css`
 --font-size-p: var(--font-size-body);
---font-size-h1: 28px;
+--line-height-p: 1.7;
+--font-size-h1: 26px;
 --font-size-h2: 22px;
---font-size-h3: 18px;
---font-size-h4: 16px;
+--font-size-h3: 20px;
+--font-size-h4: 18px;
 --font-size-h5: 15px;
 --font-size-h6: 15px;
 
