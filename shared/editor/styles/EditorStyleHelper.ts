@@ -225,10 +225,10 @@ export class EditorStyleHelper {
   static readonly padding = 32;
 
   /** Table of contents width */
-  static readonly tocWidth = 256;
+  static readonly tocWidth = 220;
 
   /** Width of the document content area */
-  static readonly documentWidth = "52em";
+  static readonly documentWidth = "54.7em";
 
   /** Gutter width for the document (for decorations, etc) */
   static readonly documentGutter = "88px";

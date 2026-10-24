@@ -196,7 +196,7 @@ const StickyWrapper = styled.div`
 
   ${hideScrollbars()}
 
-  padding: 0 16px;
+  padding: 0 12px;
   overflow-y: auto;
   border-radius: 8px;
   background: ${s("background")};
@@ -228,13 +228,13 @@ const Prefix = styled.span`
 
 const ListItem = styled.li<{ level: number; active?: boolean }>`
   margin-left: ${(props) => (props.level - 1) * 10}px;
-  margin-bottom: 8px;
-  line-height: 1.3;
+  margin-bottom: 2px;
   word-break: break-word;
 
   a {
     font-weight: ${(props) => (props.active ? "600" : "inherit")};
     color: ${(props) => (props.active ? props.theme.accent : props.theme.text)};
+    line-height: 26px;
 
     ${Prefix} {
       color: ${(props) =>
@@ -245,10 +245,14 @@ const ListItem = styled.li<{ level: number; active?: boolean }>`
 
 const Link = styled.a`
   color: ${s("text")};
-  font-size: 14px;
+  font-size: 13px;
+  display: block;
+  border-radius: 4px;
+  padding-inline: 6px;
 
   &:hover {
-    color: ${s("accent")};
+    color: ${s("text")};
+    background: ${s("warmGrey")};
   }
 `;
 
