@@ -57,9 +57,7 @@ const Panel = styled.div<{ $gap?: number }>`
   gap: ${(props) => (props.$gap !== undefined ? `${props.$gap}px` : "12px")};
   width: 100%;
   color: #dbeaff;
-  font-family:
-    "Space Grotesk", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: ${(props) => props.theme.fontFamily};
   background: linear-gradient(
     150deg,
     rgba(20, 30, 62, 0.72),
@@ -99,12 +97,10 @@ const Panel = styled.div<{ $gap?: number }>`
 
   h1,
   h2 {
-    font-family:
-      "Space Grotesk", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
-      sans-serif;
+    font-family: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
     font-weight: 800;
-    font-size: clamp(21px, 3vw, 24px);
-    letter-spacing: 0.02em;
+    font-size: clamp(21px, 3vw, 25px);
+    letter-spacing: 0.04em;
     background: linear-gradient(94deg, #eaf4ff 10%, #8fd4ff 55%, #ffd0a0 95%);
     -webkit-background-clip: text;
     background-clip: text;
