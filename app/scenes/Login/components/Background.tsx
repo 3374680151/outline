@@ -21,7 +21,7 @@ const loginTheme: DefaultTheme = {
   accentText: "#04122b",
   text: "#f2f7ff",
   textSecondary: "rgba(180, 202, 240, 0.75)",
-  textTertiary: "rgba(150, 175, 220, 0.5)",
+  textTertiary: "rgba(150, 175, 220, 0.7)",
   placeholder: "rgba(140, 165, 210, 0.55)",
   link: "#9fdcff",
   divider: "rgba(122, 168, 255, 0.18)",
@@ -217,7 +217,7 @@ export function Background({ children }: Props) {
         )}
       </Notes>
       <Copyright aria-hidden="true">
-        {env.APP_NAME.toUpperCase()} · CONNECT EVERY IDEA
+        {env.APP_NAME.toUpperCase()} · WRITE · ORGANIZE · REMEMBER
       </Copyright>
       <ThemeProvider theme={loginTheme}>{children}</ThemeProvider>
     </Container>
