@@ -159,7 +159,7 @@ function Login({ children, onBack }: Props) {
         <BackButton onBack={onBack} />
         <ChangeLanguage locale={detectLanguage()} />
         <SwitchHostButton />
-        <Centered>
+        <Centered catsStatus="error">
           <PageTitle title={t("Login")} />
           <Heading centered>{t("Error")}</Heading>
           <Note>
@@ -226,28 +226,30 @@ function Login({ children, onBack }: Props) {
         <BackButton onBack={onBack} config={config} />
         <ChangeLanguage locale={detectLanguage()} />
 
-        <Centered as="form" onSubmit={handleGoSubdomain}>
-          <Heading centered>{t("Choose workspace")}</Heading>
-          <Note>
-            {t(
-              "This login method requires choosing your workspace to continue"
-            )}
-            …
-          </Note>
-          <Flex>
-            <Input
-              name="subdomain"
-              style={{ textAlign: "right" }}
-              placeholder={t("subdomain")}
-              pattern="^[a-z\d-]+$"
-              required
-            >
-              <Domain>.getoutline.com</Domain>
-            </Input>
-          </Flex>
-          <ButtonLarge type="submit" fullwidth>
-            {t("Continue")}
-          </ButtonLarge>
+        <Centered>
+          <Form onSubmit={handleGoSubdomain} style={{ width: "100%" }}>
+            <Heading centered>{t("Choose workspace")}</Heading>
+            <Note>
+              {t(
+                "This login method requires choosing your workspace to continue"
+              )}
+              …
+            </Note>
+            <Flex>
+              <Input
+                name="subdomain"
+                style={{ textAlign: "right" }}
+                placeholder={t("subdomain")}
+                pattern="^[a-z\d-]+$"
+                required
+              >
+                <Domain>.getoutline.com</Domain>
+              </Input>
+            </Flex>
+            <ButtonLarge type="submit" fullwidth>
+              {t("Continue")}
+            </ButtonLarge>
+          </Form>
         </Centered>
       </Background>
     );
@@ -275,7 +277,7 @@ function Login({ children, onBack }: Props) {
     return (
       <Background>
         <BackButton onBack={onBack} config={config} />
-        <Centered>
+        <Centered catsStatus="happy">
           <PageTitle title={t("Check your email")} />
           <CheckEmailIcon size={38} />
           <Heading centered>{t("Check your email")}</Heading>
