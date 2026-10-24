@@ -445,8 +445,10 @@ const Logo = styled.div`
 `;
 
 const LoginLogo = styled.img`
-  width: min(210px, 62%);
+  display: block;
+  width: min(210px, 70%);
   height: auto;
+  margin: 0 auto;
   filter: drop-shadow(0 6px 26px rgba(94, 200, 255, 0.28));
 `;
 
