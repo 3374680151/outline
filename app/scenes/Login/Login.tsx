@@ -7,6 +7,7 @@ import { useLocation, Link, Redirect } from "react-router-dom";
 import styled from "styled-components";
 import { getCookie, setCookie } from "tiny-cookie";
 import { s } from "@shared/styles";
+import { cdnPath } from "@shared/utils/urls";
 import { Client, UserPreference } from "@shared/types";
 import { isPWA } from "@shared/utils/browser";
 import { parseDomain } from "@shared/utils/domains";
@@ -16,7 +17,6 @@ import ButtonLarge from "~/components/ButtonLarge";
 import ChangeLanguage from "~/components/ChangeLanguage";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
-import OutlineIcon from "~/components/Icons/OutlineIcon";
 import Input from "~/components/Input";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import { OneTimePasswordInput } from "~/components/OneTimePasswordInput";
@@ -347,7 +347,10 @@ function Login({ children, onBack }: Props) {
           {config.logo && !isCreate ? (
             <TeamLogo size={AvatarSize.XXLarge} src={config.logo} />
           ) : (
-            <OutlineIcon size={AvatarSize.XXLarge} />
+            <LoginLogo
+              src={cdnPath("/images/aiinfinite-logo-flow-compact.svg")}
+              alt=""
+            />
           )}
         </Logo>
         {isCreate ? (
@@ -439,6 +442,12 @@ const CheckEmailIcon = styled(EmailIcon)`
 
 const Logo = styled.div`
   margin-bottom: -4px;
+`;
+
+const LoginLogo = styled.img`
+  width: min(210px, 62%);
+  height: auto;
+  filter: drop-shadow(0 6px 26px rgba(94, 200, 255, 0.28));
 `;
 
 const Content = styled(Text)`

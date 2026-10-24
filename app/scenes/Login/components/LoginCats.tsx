@@ -71,6 +71,12 @@ export function LoginCats({ status = "idle" }: Props) {
     false,
     false,
   ]);
+  const [squinting, setSquinting] = React.useState<boolean[]>([
+    false,
+    false,
+    false,
+    false,
+  ]);
 
   const statusRef = React.useRef<CatStatus>(status);
   const typingRef = React.useRef(false);
@@ -292,29 +298,85 @@ export function LoginCats({ status = "idle" }: Props) {
   React.useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
+    const wait = (fn: () => void, delay: number) => {
+      timers.push(setTimeout(fn, delay));
+    };
+
+    const setEye = (
+      setter: React.Dispatch<React.SetStateAction<boolean[]>>,
+      index: number,
+      value: boolean
+    ) => {
+      setter((prev) => {
+        const next = [...prev];
+        next[index] = value;
+        return next;
+      });
+    };
+
     const scheduleBlink = (index: number) => {
-      const delay = 2600 + Math.random() * 4200;
-      const timeout = setTimeout(() => {
-        setBlinking((prev) => {
-          const next = [...prev];
-          next[index] = true;
-          return next;
-        });
-        setTimeout(() => {
-          setBlinking((prev) => {
-            const next = [...prev];
-            next[index] = false;
-            return next;
-          });
-          scheduleBlink(index);
-        }, 140);
-      }, delay);
-      timers.push(timeout);
+      wait(
+        () => {
+          setEye(setBlinking, index, true);
+          wait(() => {
+            setEye(setBlinking, index, false);
+            scheduleBlink(index);
+          }, 140);
+        },
+        1800 + Math.random() * 2400
+      );
+    };
+
+    // All cats blink twice in unison every so often.
+    const scheduleChorus = () => {
+      wait(
+        () => {
+          for (let i = 0; i < 4; i++) {
+            setEye(setBlinking, i, true);
+          }
+          wait(() => {
+            for (let i = 0; i < 4; i++) {
+              setEye(setBlinking, i, false);
+            }
+            wait(() => {
+              for (let i = 0; i < 4; i++) {
+                setEye(setBlinking, i, true);
+              }
+              wait(() => {
+                for (let i = 0; i < 4; i++) {
+                  setEye(setBlinking, i, false);
+                }
+                scheduleChorus();
+              }, 150);
+            }, 130);
+          }, 150);
+        },
+        7000 + Math.random() * 3000
+      );
+    };
+
+    // Occasionally a cat closes its eyes into a content squint.
+    const scheduleSquint = (index: number) => {
+      wait(
+        () => {
+          setEye(setSquinting, index, true);
+          wait(
+            () => {
+              setEye(setSquinting, index, false);
+              scheduleSquint(index);
+            },
+            900 + Math.random() * 500
+          );
+        },
+        6000 + Math.random() * 5000
+      );
     };
 
     for (let i = 0; i < 4; i++) {
       scheduleBlink(i);
+      scheduleSquint(i);
     }
+    scheduleChorus();
     return () => timers.forEach(clearTimeout);
   }, []);
 
@@ -340,7 +402,12 @@ export function LoginCats({ status = "idle" }: Props) {
           return (
             <div
               key={cat.id}
-              className={["cat", state, blinking[i] ? "blink" : undefined]
+              className={[
+                "cat",
+                state,
+                blinking[i] ? "blink" : undefined,
+                squinting[i] ? "squint" : undefined,
+              ]
                 .filter(Boolean)
                 .join(" ")}
               style={
@@ -714,6 +781,12 @@ const Stage = styled.div`
     height: 52%;
     border-radius: 0 0 50% 50%;
     transition: height 0.3s ease;
+  }
+  .cat.squint .sclera {
+    transform: scaleY(0.14);
+  }
+  .cat.squint .cheek {
+    opacity: 1;
   }
 
   .muzzle {
