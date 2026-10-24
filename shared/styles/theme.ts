@@ -50,13 +50,17 @@ const sidebarPadding = 16;
 
 const spacing = {
   sidebarWidth: 260,
-  sidebarRightWidth: 300,
+  sidebarRightWidth: 360,
   sidebarCollapsedWidth: 16,
   sidebarMinWidth,
   sidebarMaxWidth: 500,
   /** The narrowest a sidebar can be resized to, including its padding. */
   sidebarResizeMinWidth: sidebarMinWidth + sidebarPadding,
 };
+
+/** Soft elevation for comment bubbles and similar inline cards. */
+const commentShadowLight = "0 2px 8px rgba(31, 35, 41, 0.06)";
+const commentShadowDark = "0 2px 8px rgba(0, 0, 0, 0.3)";
 
 const buildBaseTheme = (input: Partial<Colors>) => {
   const colors = {
@@ -162,6 +166,7 @@ export const buildLightTheme = (input: Partial<Colors>): DefaultTheme => {
     menuItemSelected: colors.warmGrey,
     menuBackground: colors.white,
     menuShadow: "0 0 1px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.1)",
+    commentShadow: commentShadowLight,
     divider: colors.slateLight,
     titleBarDivider: colors.slateLight,
     inputBorder: colors.slateLight,
@@ -228,6 +233,7 @@ export const buildDarkTheme = (input: Partial<Colors>): DefaultTheme => {
     menuBackground: "#181c25",
     menuShadow:
       "0 0 0 1px rgb(34 40 52), 0 8px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08)",
+    commentShadow: commentShadowDark,
     divider: lighten(0.1, colors.almostBlack),
     titleBarDivider: darken(0.4, colors.slate),
     inputBorder: colors.slateDark,

@@ -16,12 +16,12 @@ export const HighlightedText = styled(Text).attrs({ size: "small" })`
 
   &:after {
     content: "";
-    width: 2px;
+    width: 3px;
     position: absolute;
     inset-inline-start: 0;
     top: 2px;
     bottom: 2px;
-    background: ${s("commentMarkBackground")};
+    background: ${s("divider")};
     border-radius: 2px;
   }
 `;

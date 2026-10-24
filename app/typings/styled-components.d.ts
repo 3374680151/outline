@@ -140,6 +140,7 @@ declare module "styled-components" {
     textDiffDeletedBackground: string;
     placeholder: string;
     commentMarkBackground: string;
+    commentShadow: string;
     commentedImageOutlineLight: string;
     commentedImageOutlineDark: string;
     sidebarBackground: string;
