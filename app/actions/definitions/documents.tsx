@@ -752,6 +752,32 @@ export const downloadDocumentAsMarkdown = createAction({
   },
 });
 
+export const downloadDocumentAsMarkdownSourceOnly = createAction({
+  name: ({ t, isMenu }) =>
+    isMenu
+      ? t("Markdown (source only)")
+      : t("Download as Markdown (source only)"),
+  analyticsName: "Download document as Markdown (source only)",
+  section: ActiveDocumentSection,
+  shortcut: fileExtensionHint(".md"),
+  keywords: "md markdown export download source original english",
+  icon: <MarkdownIcon />,
+  iconInContextMenu: false,
+  visible: ({ activeDocumentId, stores }) =>
+    !!activeDocumentId && stores.policies.abilities(activeDocumentId).download,
+  perform: async ({ activeDocumentId, stores }) => {
+    if (!activeDocumentId) {
+      return;
+    }
+
+    const document = stores.documents.get(activeDocumentId);
+    await document?.download({
+      contentType: ExportContentType.Markdown,
+      includeTranslations: false,
+    });
+  },
+});
+
 export const downloadDocumentAsHTML = createAction({
   name: ({ t, isMenu }) => (isMenu ? t("HTML") : t("Download as HTML")),
   analyticsName: "Download document as HTML",
@@ -1182,6 +1208,7 @@ export const exportDocument = createActionWithChildren({
   keywords: "download print pdf markdown html",
   children: [
     downloadDocumentAsMarkdown,
+    downloadDocumentAsMarkdownSourceOnly,
     downloadDocumentAsHTML,
     downloadDocumentAsTextBundle,
     downloadDocumentAsPDF,
@@ -1944,6 +1971,7 @@ export const rootDocumentActions = [
   deleteDocument,
   importDocument,
   downloadDocumentAsMarkdown,
+  downloadDocumentAsMarkdownSourceOnly,
   downloadDocumentAsHTML,
   downloadDocumentAsTextBundle,
   downloadDocumentAsPDF,

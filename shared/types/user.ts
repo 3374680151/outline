@@ -34,6 +34,10 @@ export enum UserPreference {
   NotificationBadge = "notificationBadge",
   /** The display order of the reorderable sections in the sidebar. */
   SidebarSectionOrder = "sidebarSectionOrder",
+  /** The source language used by the translation panel, auto when unset. */
+  TranslationSourceLanguage = "translationSourceLanguage",
+  /** The target language used by the translation panel. */
+  TranslationTargetLanguage = "translationTargetLanguage",
 }
 
 /** Styles of prefix that can be shown before headings. */
@@ -82,4 +86,6 @@ export type UserPreferences = {
   [UserPreference.ShowDocumentStats]?: boolean;
   [UserPreference.NotificationBadge]?: NotificationBadgeType;
   [UserPreference.SidebarSectionOrder]?: SidebarSection[];
+  [UserPreference.TranslationSourceLanguage]?: string;
+  [UserPreference.TranslationTargetLanguage]?: string;
 };

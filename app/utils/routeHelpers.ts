@@ -37,6 +37,15 @@ export function draftsPath(): string {
 }
 
 /**
+ * Returns the path to the translation screen.
+ *
+ * @returns the translate path.
+ */
+export function translatePath(): string {
+  return "/translate";
+}
+
+/**
  * Returns the path to the archive screen.
  *
  * @returns the archive path.

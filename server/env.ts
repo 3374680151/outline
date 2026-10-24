@@ -494,6 +494,20 @@ export class Environment {
   public DROPBOX_APP_KEY = this.toOptionalString(environment.DROPBOX_APP_KEY);
 
   /**
+   * Base URL of a self-hosted LanguageTool server used for grammar checking,
+   * e.g. http://127.0.0.1:8010. Grammar checking is unavailable when unset.
+   */
+  @IsOptional()
+  @IsUrl({
+    protocols: ["http", "https"],
+    require_protocol: true,
+    require_tld: false,
+  })
+  public LANGUAGE_TOOL_URL = this.toOptionalString(
+    environment.LANGUAGE_TOOL_URL
+  )?.replace(/\/$/, "");
+
+  /**
    * Sentry DSN for capturing errors and frontend performance.
    */
   @Public

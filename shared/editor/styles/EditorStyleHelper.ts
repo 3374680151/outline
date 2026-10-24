@@ -61,6 +61,9 @@ export class EditorStyleHelper {
   /** Container for the comment indicators shown in the gutter beside a line */
   static readonly commentGutter = "comment-gutter";
 
+  /** Machine translated text inserted below its source block */
+  static readonly translation = "translation-marker";
+
   // Multiplayer
 
   /** Remote collaborator's cursor */

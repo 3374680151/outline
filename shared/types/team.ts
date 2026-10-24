@@ -4,6 +4,17 @@ export type CustomTheme = {
   accentText: string;
 };
 
+/** Configuration for the workspace translation service. The API key is stored
+ * separately and never presented to clients. */
+export type TeamTranslationSettings = {
+  /** Base URL of an OpenAI-compatible API, e.g. https://api.openai.com/v1 */
+  baseUrl: string;
+  /** Model name to use for translation requests. */
+  model: string;
+  /** BCP-47 tag of the language to translate into, e.g. zh-CN. */
+  targetLanguage: string;
+};
+
 /** The workspace details that are visible on public shares. */
 export type PublicTeam = {
   avatarUrl: string;

@@ -43,6 +43,9 @@ type PersistedData = Pick<
   | "sidebarRightWidth"
   | "sidebarCollapsed"
   | "tocVisible"
+  | "translationPanelVisible"
+  | "grammarPanelVisible"
+  | "translationPaneRatio"
 >;
 
 class UiStore {
@@ -73,6 +76,19 @@ class UiStore {
 
   @observable
   tocVisible: boolean | undefined = undefined;
+
+  // Whether the translation pane is shown next to the document
+  @observable
+  translationPanelVisible: boolean = false;
+
+  // Whether the grammar pane is shown next to the document
+  @observable
+  grammarPanelVisible: boolean = false;
+
+  // Fraction of the content width occupied by the translation pane; undefined
+  // means it has never been dragged and defaults to a near-even split.
+  @observable
+  translationPaneRatio: number | undefined = undefined;
 
   @observable
   mobileSidebarVisible = false;
@@ -168,6 +184,12 @@ class UiStore {
       maxWidth
     );
     this.tocVisible = data.tocVisible;
+    this.translationPanelVisible = data.translationPanelVisible ?? false;
+    this.grammarPanelVisible = data.grammarPanelVisible ?? false;
+    this.translationPaneRatio =
+      data.translationPaneRatio !== undefined
+        ? clamp(data.translationPaneRatio, 0.2, 0.75)
+        : undefined;
     this.rightSidebar = data.rightSidebar ?? null;
     this.theme = data.theme || Theme.System;
     Storage.set(THEME_STORAGE_KEY, this.theme);
@@ -553,6 +575,9 @@ class UiStore {
   get asJson(): PersistedData {
     return {
       tocVisible: this.tocVisible,
+      translationPanelVisible: this.translationPanelVisible,
+      grammarPanelVisible: this.grammarPanelVisible,
+      translationPaneRatio: this.translationPaneRatio,
       sidebarCollapsed: this.sidebarCollapsed,
       sidebarWidth: this.sidebarWidth,
       sidebarRightWidth: this.sidebarRightWidth,

@@ -22,6 +22,7 @@ import {
   homePath,
   searchPath,
   settingsPath,
+  translatePath,
   matchDocumentSlug as documentSlug,
   matchCollectionSlug as collectionSlug,
   trashPath,
@@ -88,6 +89,11 @@ function AuthenticatedRoutes() {
                   component={Scenes.Drafts.Component}
                 />
               )}
+              <Route
+                exact
+                path={translatePath()}
+                component={Scenes.Translate.Component}
+              />
               {can.createDocument && (
                 <Route
                   exact

@@ -47,6 +47,7 @@ const Profile = lazy(() => import("~/scenes/Settings/Profile"));
 const Security = lazy(() => import("~/scenes/Settings/Security"));
 const Shares = lazy(() => import("~/scenes/Settings/Shares"));
 const Templates = lazy(() => import("~/scenes/Settings/Templates"));
+const Translation = lazy(() => import("~/scenes/Settings/Translation"));
 const CustomEmojis = lazy(() => import("~/scenes/Settings/CustomEmojis"));
 const Embeds = lazy(() => import("~/scenes/Settings/Embeds"));
 
@@ -188,6 +189,15 @@ const useSettingsConfig = () => {
         enabled: can.update,
         group: t("Workspace"),
         icon: SparklesIcon,
+      },
+      {
+        name: t("Translation"),
+        path: settingsPath("translation"),
+        component: Translation.Component,
+        preload: Translation.preload,
+        enabled: can.update,
+        group: t("Workspace"),
+        icon: GlobeIcon,
       },
       {
         name: t("Shared links"),

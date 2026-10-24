@@ -965,7 +965,8 @@ router.post(
   auth(),
   validate(T.DocumentsExportSchema),
   async (ctx: APIContext<T.DocumentsExportReq>) => {
-    const { id, signedUrls, includeChildDocuments } = ctx.input.body;
+    const { id, signedUrls, includeChildDocuments, includeTranslations } =
+      ctx.input.body;
     const { user } = ctx.state.auth;
     const accept = ctx.request.headers["accept"];
 
@@ -1027,6 +1028,7 @@ router.post(
         signedUrls,
         teamId: user.teamId,
         commonMark: true,
+        excludeTranslations: includeTranslations === false,
       });
 
     // A TextBundle is a directory of files, so unlike the other formats it has

@@ -122,3 +122,29 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
 };
+
+/** A language offered by the translation feature. */
+export interface TranslationLanguage {
+  /** BCP-47 tag of the language, e.g. zh-CN. */
+  value: string;
+  /** Native label of the language. */
+  label: string;
+}
+
+/** Languages offered for translation, ordered by expected usage. */
+export const translationLanguages: TranslationLanguage[] = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "zh-TW", label: "繁體中文" },
+  { value: "en-US", label: "English" },
+  { value: "ja-JP", label: "日本語" },
+  { value: "ko-KR", label: "한국어" },
+  { value: "fr-FR", label: "Français" },
+  { value: "de-DE", label: "Deutsch" },
+  { value: "es-ES", label: "Español" },
+  { value: "ru-RU", label: "Русский" },
+  { value: "pt-BR", label: "Português" },
+  { value: "it-IT", label: "Italiano" },
+];
+
+/** Language tag used to request automatic source language detection. */
+export const TRANSLATION_AUTO_DETECT = "auto";

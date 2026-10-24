@@ -1527,6 +1527,10 @@ ${
 `
 }
 
+.${EditorStyleHelper.translation} {
+  color: ${props.theme.textSecondary};
+}
+
 .${EditorStyleHelper.notice} {
   display: flex;
   align-items: center;

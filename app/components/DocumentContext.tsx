@@ -123,7 +123,7 @@ class DocumentContext {
 
   /** The ProseMirror document currently held by the editor */
   @observable.ref
-  private editorDoc: Node | undefined = undefined;
+  editorDoc: Node | undefined = undefined;
 
   private updateHeadings() {
     const currHeadings = this.editor?.getHeadings() ?? [];

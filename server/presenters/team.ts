@@ -26,6 +26,15 @@ export default function presentTeam(team: Team) {
       ? pick(team.preferences, Object.values(TeamPreference))
       : team.preferences,
     guidanceMCP: team.guidanceMCP,
+    // The API key is deliberately excluded – it must never reach the client.
+    translation: team.translationSettings
+      ? {
+          baseUrl: team.translationSettings.baseUrl,
+          model: team.translationSettings.model,
+          targetLanguage: team.translationSettings.targetLanguage,
+          configured: !!team.translationApiKey,
+        }
+      : undefined,
     plan: team.plan,
     entitlements: team.entitlements,
   };

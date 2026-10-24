@@ -40,6 +40,7 @@ import SidebarLink from "./components/SidebarLink";
 import { SidebarNavigationProvider } from "./components/SidebarNavigation";
 import Starred from "./components/Starred";
 import ToggleButton from "./components/ToggleButton";
+import { TranslateLink } from "./components/TranslateLink";
 import TrashLink from "./components/TrashLink";
 import useMobile from "~/hooks/useMobile";
 
@@ -134,6 +135,7 @@ function AppSidebar() {
               onClickIntent={Scenes.Search.preload}
             />
             {can.createDocument && <DraftsLink />}
+            <TranslateLink />
           </Section>
         </Overflow>
         <Scrollable flex shadow ref={setScrollArea}>
