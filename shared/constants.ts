@@ -121,6 +121,8 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.SortCommentsByOrderInDocument]: true,
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
+  [UserPreference.GrammarLanguage]: "auto",
+  [UserPreference.GrammarAutoCheck]: true,
 };
 
 /** A language offered by the translation feature. */
@@ -148,3 +150,6 @@ export const translationLanguages: TranslationLanguage[] = [
 
 /** Language tag used to request automatic source language detection. */
 export const TRANSLATION_AUTO_DETECT = "auto";
+
+/** Language tag used to request automatic grammar check language detection. */
+export const GRAMMAR_AUTO_DETECT = "auto";

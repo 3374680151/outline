@@ -5,9 +5,13 @@ import { EditorState } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
 import {
   applyGrammarFix,
+  collectGrammarBlocks,
   collectGrammarUnits,
   filterGrammarMatches,
+  grammarCategoryLabel,
+  grammarIssueKind,
   isCheckableText,
+  locateGrammarRange,
   type GrammarEditor,
   type GrammarMatch,
 } from "./documentGrammar";
@@ -69,6 +73,7 @@ function match(offset: number, length: number, value?: string): GrammarMatch {
     offset,
     length,
     replacements: value ? [{ value }] : [],
+    ruleUrls: [],
   };
 }
 
@@ -95,6 +100,38 @@ describe("#collectGrammarUnits", () => {
 
     expect(collectGrammarUnits(doc)).toEqual(["Hello"]);
   });
+
+  it("should collect Chinese text blocks", () => {
+    const doc = buildDoc(paragraph("我们讨论了关于这个问题。"));
+
+    expect(collectGrammarUnits(doc)).toEqual(["我们讨论了关于这个问题。"]);
+  });
+});
+
+describe("#collectGrammarBlocks", () => {
+  it("should locate blocks with their absolute positions", () => {
+    const doc = buildDoc(paragraph("First."), paragraph("Second."));
+
+    const blocks = collectGrammarBlocks(doc);
+
+    expect(blocks.map((block) => block.text)).toEqual(["First.", "Second."]);
+    expect(blocks[0].pos).toEqual(0);
+    expect(blocks[1].pos).toEqual(blocks[0].pos + blocks[0].node.nodeSize);
+  });
+
+  it("should locate blocks inside list items", () => {
+    const doc = buildDoc(
+      schema.nodes.bullet_list.create(null, [
+        schema.nodes.list_item.create(null, paragraph("List item one")),
+      ])
+    );
+
+    const blocks = collectGrammarBlocks(doc);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].text).toEqual("List item one");
+    expect(blocks[0].pos).toBeGreaterThan(0);
+  });
 });
 
 describe("#isCheckableText", () => {
@@ -102,23 +139,123 @@ describe("#isCheckableText", () => {
     expect(isCheckableText("This is an English sentence.")).toBe(true);
   });
 
-  it("should reject text without enough Latin letters", () => {
-    expect(isCheckableText("你好，世界！")).toBe(false);
+  it("should accept Chinese prose", () => {
+    expect(isCheckableText("我们讨论了关于这个问题。")).toBe(true);
+  });
+
+  it("should reject text without letters", () => {
     expect(isCheckableText("12345 + 678 = 9012")).toBe(false);
-    expect(isCheckableText("ab")).toBe(false);
+    expect(isCheckableText("!!! ??? ...")).toBe(false);
   });
 });
 
 describe("#filterGrammarMatches", () => {
-  it("should filter out matches that overlap CJK characters", () => {
-    const text = "用 the wrong word 和 an test";
+  it("should filter out misspellings of personal dictionary words", () => {
+    const text = "The word Outlinee is flagged.";
     const matches = [
-      { ...match(2, 3), message: "Use a instead of an" },
-      { ...match(17, 1), message: "Unknown word" },
+      { ...match(9, 8), issueType: "misspelling" },
+      { ...match(0, 3), issueType: "grammar" },
     ];
 
-    expect(filterGrammarMatches(text, matches)).toHaveLength(1);
-    expect(filterGrammarMatches(text, matches)[0].offset).toEqual(2);
+    expect(
+      filterGrammarMatches(text, matches, { dictionary: ["outlinee"] })
+    ).toHaveLength(1);
+    expect(
+      filterGrammarMatches(text, matches, { dictionary: ["outlinee"] })[0]
+        .issueType
+    ).toEqual("grammar");
+  });
+
+  it("should keep misspellings of words outside the dictionary", () => {
+    const matches = [{ ...match(0, 4), issueType: "misspelling" }];
+
+    expect(
+      filterGrammarMatches("teh test", matches, { dictionary: ["other"] })
+    ).toHaveLength(1);
+  });
+
+  it("should filter out disabled rules", () => {
+    const matches = [
+      { ...match(0, 3), ruleId: "RULE_A" },
+      { ...match(4, 2), ruleId: "RULE_B" },
+    ];
+
+    const filtered = filterGrammarMatches("an an test", matches, {
+      disabledRules: ["RULE_A"],
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].ruleId).toEqual("RULE_B");
+  });
+
+  it("should keep everything without filter options", () => {
+    const matches = [match(0, 2), match(3, 4)];
+
+    expect(filterGrammarMatches("some text", matches)).toHaveLength(2);
+  });
+});
+
+describe("#grammarIssueKind", () => {
+  it("should color misspellings red, style hints green, others blue", () => {
+    expect(
+      grammarIssueKind({ ...match(0, 1), issueType: "misspelling" })
+    ).toEqual("danger");
+    expect(grammarIssueKind({ ...match(0, 1), issueType: "style" })).toEqual(
+      "success"
+    );
+    expect(
+      grammarIssueKind({ ...match(0, 1), issueType: "typographical" })
+    ).toEqual("success");
+    expect(grammarIssueKind({ ...match(0, 1), issueType: "grammar" })).toEqual(
+      "accent"
+    );
+    expect(grammarIssueKind(match(0, 1))).toEqual("accent");
+  });
+});
+
+describe("#grammarCategoryLabel", () => {
+  it("should map issue types to category labels", () => {
+    expect(
+      grammarCategoryLabel({ ...match(0, 1), issueType: "misspelling" })
+    ).toEqual("Spelling");
+    expect(
+      grammarCategoryLabel({ ...match(0, 1), issueType: "style" })
+    ).toEqual("Style");
+    expect(
+      grammarCategoryLabel({ ...match(0, 1), issueType: "grammar" })
+    ).toEqual("Grammar");
+    expect(grammarCategoryLabel(match(0, 1))).toEqual("Other");
+  });
+});
+
+describe("#locateGrammarRange", () => {
+  it("should locate a flagged span within the matching block", () => {
+    const doc = buildDoc(
+      paragraph("Something else."),
+      paragraph("这是一个测试。")
+    );
+
+    const segment = locateGrammarRange(doc, {
+      unitText: "这是一个测试。",
+      offset: 2,
+      length: 2,
+    });
+
+    expect(segment).toBeDefined();
+    expect(segment?.from).toBeGreaterThan(0);
+    expect(doc.textBetween(segment!.from, segment!.to)).toEqual("一个");
+  });
+
+  it("should return undefined for unknown text", () => {
+    const doc = buildDoc(paragraph("Something else."));
+
+    expect(
+      locateGrammarRange(doc, {
+        unitText: "Not present.",
+        offset: 0,
+        length: 3,
+      })
+    ).toBeUndefined();
   });
 });
 
@@ -142,6 +279,23 @@ describe("#applyGrammarFix", () => {
     expect(fake.lastDoc() && blocksOf(fake.lastDoc())[1].textContent).toEqual(
       "This is a test."
     );
+  });
+
+  it("should replace a flagged Chinese span", () => {
+    const fake = createFakeEditor(
+      buildDoc(paragraph("我们讨论了关于这个问题。"))
+    );
+
+    expect(
+      applyGrammarFix(fake.editor, {
+        unitText: "我们讨论了关于这个问题。",
+        offset: 5,
+        length: 2,
+        replacement: "",
+      })
+    ).toBe(true);
+
+    expect(fake.lastDoc()?.textContent).toEqual("我们讨论了这个问题。");
   });
 
   it("should keep the marks of the replaced text", () => {

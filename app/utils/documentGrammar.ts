@@ -29,6 +29,10 @@ export interface GrammarMatch {
   context?: { text: string; offset: number; length: number };
   issueType?: string;
   ruleId?: string;
+  /** Human description of the rule the issue was reported by */
+  ruleDescription?: string;
+  /** External pages explaining the rule */
+  ruleUrls: string[];
   categoryName?: string;
 }
 
@@ -41,12 +45,83 @@ export interface GrammarFix {
   replacement: string;
 }
 
-/** A text node of the document mapped to the checked block text. */
-interface TextSegment {
+/** A text block of the document with its position and checked text. */
+export interface GrammarBlock {
+  /** The block node */
+  node: ProsemirrorNode;
+  /** The absolute position of the block node */
+  pos: number;
+  /** The concatenated text of all text nodes of the block */
+  raw: string;
+  /** The trimmed text of the block, the unit grammar checking runs on */
+  text: string;
+}
+
+/** The document range of a flagged span. */
+export interface GrammarRange {
   from: number;
   to: number;
+}
+
+/** A located flagged span, with the marks of the text at its start. */
+export interface GrammarSegment extends GrammarRange {
   marks: readonly Mark[];
 }
+
+/** The visual kind of an issue, following the official client colors. */
+export type GrammarIssueKind = "danger" | "success" | "accent";
+
+const STYLE_ISSUE_TYPES = ["style", "register", "typographical"];
+const STYLE_CATEGORY_NAMES = ["style", "typography"];
+
+/**
+ * Returns the visual kind of an issue, following the official client colors:
+ * spelling mistakes are red, style hints green and other issues blue.
+ *
+ * @param match The reported match.
+ * @returns The issue kind.
+ */
+export function grammarIssueKind(match: GrammarMatch): GrammarIssueKind {
+  if (match.issueType === "misspelling") {
+    return "danger";
+  }
+
+  if (
+    STYLE_ISSUE_TYPES.includes(match.issueType ?? "") ||
+    STYLE_CATEGORY_NAMES.includes((match.categoryName ?? "").toLowerCase())
+  ) {
+    return "success";
+  }
+
+  return "accent";
+}
+
+/**
+ * Returns the English label of an issue's category, for translation.
+ *
+ * @param match The reported match.
+ * @returns The category label key.
+ */
+export function grammarCategoryLabel(match: GrammarMatch): string {
+  switch (match.issueType) {
+    case "misspelling":
+      return "Spelling";
+    case "style":
+    case "register":
+      return "Style";
+    case "whitespace":
+    case "typographical":
+    case "characters":
+    case "formatting":
+      return "Punctuation";
+    case "grammar":
+      return "Grammar";
+    default:
+      return "Other";
+  }
+}
+
+const LETTER_RE = /\p{L}/u;
 
 /**
  * Collects the text of every text node within the node. This is the text
@@ -78,66 +153,140 @@ export function collectBlockText(node: ProsemirrorNode): string {
  * @returns The text of each checkable block, trimmed.
  */
 export function collectGrammarUnits(doc: ProsemirrorNode): string[] {
-  const units: string[] = [];
-
-  doc.forEach((block) => collectUnits(block, units));
-
-  return units;
+  return collectGrammarBlocks(doc).map((block) => block.text);
 }
 
 /**
- * Recursively collects checkable text blocks from a node.
+ * Collects the checkable text blocks of a document with their absolute
+ * positions, in document order.
  *
- * @param node The node to walk.
- * @param units The array to append text units to.
+ * @param doc The current ProseMirror document.
+ * @returns The text blocks of the document, empty blocks excluded.
  */
-function collectUnits(node: ProsemirrorNode, units: string[]): void {
-  if (TRANSLATABLE_TEXT_BLOCKS.includes(node.type.name)) {
-    const text = collectBlockText(node).trim();
+export function collectGrammarBlocks(doc: ProsemirrorNode): GrammarBlock[] {
+  const found: { node: ProsemirrorNode; pos: number }[] = [];
+  collectTextBlocks(doc, 0, found);
+
+  const blocks: GrammarBlock[] = [];
+
+  for (const { node, pos } of found) {
+    const raw = collectBlockText(node);
+    const text = raw.trim();
+
     if (text) {
-      units.push(text);
+      blocks.push({ node, pos, raw, text });
     }
-    return;
   }
 
-  if (TRANSLATABLE_CONTAINERS.includes(node.type.name)) {
-    node.forEach((child) => collectUnits(child, units));
-  }
+  return blocks;
 }
 
-const LATIN_LETTER_RE = /[A-Za-z]/g;
-
-const CJK_TEST_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/;
-
 /**
- * Returns whether the text contains enough Latin letters to be worth a
- * grammar check. Purely CJK text is skipped so it is never sent to the
- * English grammar service.
+ * Returns whether the text contains enough letters to be worth a grammar
+ * check, in any script. Blocks of pure numbers or punctuation are skipped.
  *
  * @param text The block text to inspect.
- * @returns True when the text looks like prose in a Latin script.
+ * @returns True when the text looks like prose.
  */
 export function isCheckableText(text: string): boolean {
-  return (text.match(LATIN_LETTER_RE) ?? []).length >= 3;
+  return LETTER_RE.test(text);
+}
+
+/** Options controlling which reported matches are shown to the user. */
+export interface GrammarFilterOptions {
+  /** Words the user added to their personal dictionary. */
+  dictionary?: string[];
+  /** Rule IDs the user has turned off. */
+  disabledRules?: string[];
 }
 
 /**
- * Filters out matches that point at CJK characters. LanguageTool is asked to
- * check English, so in mixed language text every CJK character would be
- * reported as a misspelling – those matches are noise.
+ * Filters reported matches down to those the user wants to see: dictionary
+ * words are never misspellings and disabled rules are never shown.
  *
  * @param text The text that was checked.
  * @param matches The matches reported for the text.
- * @returns The matches that point at Latin text only.
+ * @param options The user's dictionary and disabled rules.
+ * @returns The matches to display.
  */
 export function filterGrammarMatches(
   text: string,
-  matches: GrammarMatch[]
+  matches: GrammarMatch[],
+  options: GrammarFilterOptions = {}
 ): GrammarMatch[] {
+  const dictionary = new Set(
+    (options.dictionary ?? []).map((word) => word.toLowerCase())
+  );
+  const disabledRules = new Set(options.disabledRules ?? []);
+
   return matches.filter((match) => {
-    const span = text.slice(match.offset, match.offset + match.length);
-    return !CJK_TEST_RE.test(span);
+    if (match.ruleId && disabledRules.has(match.ruleId)) {
+      return false;
+    }
+
+    if (match.issueType !== "misspelling" || dictionary.size === 0) {
+      return true;
+    }
+
+    const span = text
+      .slice(match.offset, match.offset + match.length)
+      .toLowerCase();
+
+    return !dictionary.has(span);
   });
+}
+
+/**
+ * Locates the document range of a flagged span within a checked block.
+ *
+ * @param block The block the match offsets refer to.
+ * @param offset The offset of the flagged span within the trimmed block text.
+ * @param length The length of the flagged span.
+ * @returns The range and marks, or undefined when out of bounds.
+ */
+export function locateInBlock(
+  block: GrammarBlock,
+  offset: number,
+  length: number
+): GrammarSegment | undefined {
+  // Offsets refer to the trimmed text; shift back into the raw text.
+  const lead = block.raw.length - block.raw.trimStart().length;
+  const start = lead + offset;
+  const end = start + length;
+
+  if (start < 0 || end > block.raw.length) {
+    return undefined;
+  }
+
+  return findSegment(block.node, block.pos, start, end);
+}
+
+/**
+ * Locates the document range of a flagged span within the first text block
+ * matching the checked unit text. Nothing is found when the document changed
+ * since the check and the flagged text can no longer be located.
+ *
+ * @param doc The current ProseMirror document.
+ * @param fix The flagged span to locate.
+ * @returns The range and marks, or undefined when not found.
+ */
+export function locateGrammarRange(
+  doc: ProsemirrorNode,
+  fix: Pick<GrammarFix, "unitText" | "offset" | "length">
+): GrammarSegment | undefined {
+  for (const block of collectGrammarBlocks(doc)) {
+    if (block.text !== fix.unitText) {
+      continue;
+    }
+
+    const segment = locateInBlock(block, fix.offset, fix.length);
+
+    if (segment) {
+      return segment;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -155,51 +304,34 @@ export function applyGrammarFix(
   fix: GrammarFix
 ): boolean {
   const { state, dispatch } = editor.view;
-  const blocks: { node: ProsemirrorNode; pos: number }[] = [];
-  collectTextBlocks(state.doc, 0, blocks);
+  const segment = locateGrammarRange(state.doc, fix);
 
-  for (const { node, pos } of blocks) {
-    const raw = collectBlockText(node);
+  if (!segment) {
+    return false;
+  }
 
-    if (raw.trim() !== fix.unitText) {
-      continue;
-    }
+  const tr = state.tr;
 
-    // Offsets refer to the trimmed unit text; shift back into the raw text.
-    const lead = raw.length - raw.trimStart().length;
-    const start = lead + fix.offset;
-    const end = start + fix.length;
-
-    if (start < 0 || end > raw.length) {
-      continue;
-    }
-
-    const segment = findSegment(node, pos, start, end);
-
-    if (!segment) {
-      continue;
-    }
-
-    const tr = state.tr;
+  if (fix.replacement) {
     tr.replaceWith(
       segment.from,
       segment.to,
       state.schema.text(fix.replacement, [...segment.marks])
     );
-
-    if (!tr.docChanged) {
-      return false;
-    }
-
-    dispatch(tr);
-    return true;
+  } else {
+    tr.delete(segment.from, segment.to);
   }
 
-  return false;
+  if (!tr.docChanged) {
+    return false;
+  }
+
+  dispatch(tr);
+  return true;
 }
 
 /**
- * Collects checkable text blocks with the absolute position of each block.
+ * Collects checkable text blocks from a node.
  *
  * @param node The parent node to walk.
  * @param contentStart The absolute position of the parent's content start.
@@ -239,9 +371,9 @@ function findSegment(
   blockPos: number,
   start: number,
   end: number
-): TextSegment | undefined {
+): GrammarSegment | undefined {
   let consumed = 0;
-  let result: TextSegment | undefined;
+  let result: GrammarSegment | undefined;
 
   node.descendants((child, childPos) => {
     if (result) {

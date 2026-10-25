@@ -503,6 +503,29 @@ const findAndReplaceStyle = (props: Props) => css`
   }
 `;
 
+const grammarCheckStyle = (props: Props) => css`
+  .grammar-issue {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-skip-ink: none;
+    cursor: pointer;
+  }
+
+  .grammar-issue.grammar-danger {
+    text-decoration-color: ${props.theme.danger};
+  }
+
+  .grammar-issue.grammar-success {
+    text-decoration-color: ${props.theme.success};
+  }
+
+  .grammar-issue.grammar-accent {
+    text-decoration-color: ${props.theme.accent};
+  }
+`;
+
 const emailStyle = (props: Props) => css`
   .attachment {
     display: block;
@@ -3033,6 +3056,7 @@ const EditorContainer = styled.div<Omit<Props, "theme">>`
   ${codeBlockStyle}
   ${diffStyle}
   ${findAndReplaceStyle}
+  ${grammarCheckStyle}
   ${emailStyle}
   ${textStyle}
 `;

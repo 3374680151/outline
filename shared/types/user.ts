@@ -38,6 +38,20 @@ export enum UserPreference {
   TranslationSourceLanguage = "translationSourceLanguage",
   /** The target language used by the translation panel. */
   TranslationTargetLanguage = "translationTargetLanguage",
+  /** The language grammar checking runs against, auto-detect when unset. */
+  GrammarLanguage = "grammarLanguage",
+  /** The native language of the user, enables false-friend hints. */
+  GrammarMotherTongue = "grammarMotherTongue",
+  /** Whether strict (picky) style rules are enabled during grammar checks. */
+  GrammarPickyLevel = "grammarPickyLevel",
+  /** Whether grammar issues are checked automatically while typing. */
+  GrammarAutoCheck = "grammarAutoCheck",
+  /** Category IDs the user has turned off for grammar checking. */
+  GrammarDisabledCategories = "grammarDisabledCategories",
+  /** Rule IDs the user has turned off for grammar checking. */
+  GrammarDisabledRules = "grammarDisabledRules",
+  /** Words never reported as misspellings, the user's personal dictionary. */
+  GrammarDictionary = "grammarDictionary",
 }
 
 /** Styles of prefix that can be shown before headings. */
@@ -88,4 +102,11 @@ export type UserPreferences = {
   [UserPreference.SidebarSectionOrder]?: SidebarSection[];
   [UserPreference.TranslationSourceLanguage]?: string;
   [UserPreference.TranslationTargetLanguage]?: string;
+  [UserPreference.GrammarLanguage]?: string;
+  [UserPreference.GrammarMotherTongue]?: string;
+  [UserPreference.GrammarPickyLevel]?: boolean;
+  [UserPreference.GrammarAutoCheck]?: boolean;
+  [UserPreference.GrammarDisabledCategories]?: string[];
+  [UserPreference.GrammarDisabledRules]?: string[];
+  [UserPreference.GrammarDictionary]?: string[];
 };

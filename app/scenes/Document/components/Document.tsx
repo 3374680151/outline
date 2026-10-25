@@ -714,16 +714,24 @@ const EditorContainer = styled.div<EditorContainerProps>`
           : "1 / -1"
         : 2};
 
-    // Inside the split view the editor centers itself in the space left of
-    // the translation pane.
+    // Inside the split view the editor keeps the regular layout's column
+    // width, shrinking only when the space left of the translation pane is
+    // narrower, and centers itself in any remaining space.
     ${({ translation, docFullWidth }: EditorContainerProps) =>
       translation
         ? docFullWidth
           ? "flex: 1 1 auto;"
-          : `flex: 1 1 auto;
-    width: 100%;
+          : `flex: 0 1 calc(46em + ${EditorStyleHelper.documentGutter});
     max-width: calc(46em + ${EditorStyleHelper.documentGutter});
     margin: 0 auto;`
+        : ""}
+  `};
+
+  ${breakpoint("desktopLarge")`
+    ${({ translation, docFullWidth }: EditorContainerProps) =>
+      translation && !docFullWidth
+        ? `flex-basis: calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter});
+    max-width: calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter});`
         : ""}
   `};
 `;

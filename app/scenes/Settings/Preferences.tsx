@@ -23,6 +23,7 @@ import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import UserDelete from "../UserDelete";
 import { AutoLaunchSetting } from "./components/AutoLaunchSetting";
+import GrammarSettings from "./components/GrammarSettings";
 import SettingRow from "./components/SettingRow";
 
 function Preferences() {
@@ -344,6 +345,9 @@ function Preferences() {
           labelHidden
         />
       </SettingRow>
+
+      <Heading as="h2">{t("Grammar checking")}</Heading>
+      <GrammarSettings />
 
       {can.delete && (
         <>
