@@ -7,6 +7,7 @@ import { useLocation, Link, Redirect } from "react-router-dom";
 import styled from "styled-components";
 import { getCookie, setCookie } from "tiny-cookie";
 import { s } from "@shared/styles";
+import { cdnPath } from "@shared/utils/urls";
 import { Client, UserPreference } from "@shared/types";
 import { isPWA } from "@shared/utils/browser";
 import { parseDomain } from "@shared/utils/domains";
@@ -16,7 +17,6 @@ import ButtonLarge from "~/components/ButtonLarge";
 import ChangeLanguage from "~/components/ChangeLanguage";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
-import OutlineIcon from "~/components/Icons/OutlineIcon";
 import Input from "~/components/Input";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import { OneTimePasswordInput } from "~/components/OneTimePasswordInput";
@@ -159,7 +159,7 @@ function Login({ children, onBack }: Props) {
         <BackButton onBack={onBack} />
         <ChangeLanguage locale={detectLanguage()} />
         <SwitchHostButton />
-        <Centered>
+        <Centered catsStatus="error">
           <PageTitle title={t("Login")} />
           <Heading centered>{t("Error")}</Heading>
           <Note>
@@ -226,28 +226,30 @@ function Login({ children, onBack }: Props) {
         <BackButton onBack={onBack} config={config} />
         <ChangeLanguage locale={detectLanguage()} />
 
-        <Centered as="form" onSubmit={handleGoSubdomain}>
-          <Heading centered>{t("Choose workspace")}</Heading>
-          <Note>
-            {t(
-              "This login method requires choosing your workspace to continue"
-            )}
-            …
-          </Note>
-          <Flex>
-            <Input
-              name="subdomain"
-              style={{ textAlign: "right" }}
-              placeholder={t("subdomain")}
-              pattern="^[a-z\d-]+$"
-              required
-            >
-              <Domain>.getoutline.com</Domain>
-            </Input>
-          </Flex>
-          <ButtonLarge type="submit" fullwidth>
-            {t("Continue")}
-          </ButtonLarge>
+        <Centered>
+          <Form onSubmit={handleGoSubdomain} style={{ width: "100%" }}>
+            <Heading centered>{t("Choose workspace")}</Heading>
+            <Note>
+              {t(
+                "This login method requires choosing your workspace to continue"
+              )}
+              …
+            </Note>
+            <Flex>
+              <Input
+                name="subdomain"
+                style={{ textAlign: "right" }}
+                placeholder={t("subdomain")}
+                pattern="^[a-z\d-]+$"
+                required
+              >
+                <Domain>.getoutline.com</Domain>
+              </Input>
+            </Flex>
+            <ButtonLarge type="submit" fullwidth>
+              {t("Continue")}
+            </ButtonLarge>
+          </Form>
         </Centered>
       </Background>
     );
@@ -275,7 +277,7 @@ function Login({ children, onBack }: Props) {
     return (
       <Background>
         <BackButton onBack={onBack} config={config} />
-        <Centered>
+        <Centered catsStatus="happy">
           <PageTitle title={t("Check your email")} />
           <CheckEmailIcon size={38} />
           <Heading centered>{t("Check your email")}</Heading>
@@ -345,7 +347,10 @@ function Login({ children, onBack }: Props) {
           {config.logo && !isCreate ? (
             <TeamLogo size={AvatarSize.XXLarge} src={config.logo} />
           ) : (
-            <OutlineIcon size={AvatarSize.XXLarge} />
+            <LoginLogo
+              src={cdnPath("/images/aiinfinite-logo-flow-compact.svg")}
+              alt=""
+            />
           )}
         </Logo>
         {isCreate ? (
@@ -437,6 +442,14 @@ const CheckEmailIcon = styled(EmailIcon)`
 
 const Logo = styled.div`
   margin-bottom: -4px;
+`;
+
+const LoginLogo = styled.img`
+  display: block;
+  width: min(210px, 70%);
+  height: auto;
+  margin: 0 auto;
+  filter: drop-shadow(0 6px 26px rgba(94, 200, 255, 0.28));
 `;
 
 const Content = styled(Text)`
