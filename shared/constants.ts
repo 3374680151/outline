@@ -107,6 +107,11 @@ export const TeamPreferenceDefaults: TeamPreferences = {
   [TeamPreference.MCP]: true,
   [TeamPreference.DisabledEmbeds]: [],
   [TeamPreference.PersonalDocs]: true,
+  [TeamPreference.BilingualEditor]: true,
+  [TeamPreference.GrammarChecking]: true,
+  [TeamPreference.GrammarLevel]: "default" as const,
+  [TeamPreference.GrammarDisabledRules]: "",
+  [TeamPreference.TranslationTrigger]: "dot" as const,
 };
 
 export const DocumentPreferenceDefaults: DocumentPreferences = {

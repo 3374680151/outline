@@ -24,6 +24,7 @@ import TeamLogo from "../TeamLogo";
 import Tooltip from "../Tooltip";
 import Sidebar from "./Sidebar";
 import ArchiveLink from "./components/ArchiveLink";
+import { BilingualLink } from "./components/BilingualLink";
 import Collections from "./components/Collections";
 import DraggableSection, {
   normalizeSidebarSectionOrder,
@@ -151,6 +152,7 @@ function AppSidebar() {
               )}
             </SidebarNavigationProvider>
             <Section>
+              {can.createDocument && <BilingualLink />}
               {can.createDocument && <TrashLink />}
               <DismissableSidebarAction
                 id="sidebar-import-hidden"

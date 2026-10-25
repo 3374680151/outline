@@ -67,6 +67,16 @@ export enum TeamPreference {
   DisabledEmbeds = "disabledEmbeds",
   /** Whether users can create documents in a personal collection. */
   PersonalDocs = "personalDocs",
+  /** Whether the bilingual editor module is enabled for the workspace. */
+  BilingualEditor = "bilingualEditor",
+  /** Whether grammar checking is enabled for the workspace. */
+  GrammarChecking = "grammarChecking",
+  /** Default LanguageTool level used when grammar checking. */
+  GrammarLevel = "grammarLevel",
+  /** Comma separated LanguageTool rule ids the workspace chose to ignore. */
+  GrammarDisabledRules = "grammarDisabledRules",
+  /** When the translation dot should appear while editing. */
+  TranslationTrigger = "translationTrigger",
 }
 
 /** Workspace preference values, keyed by preference. */
@@ -86,4 +96,9 @@ export type TeamPreferences = {
   [TeamPreference.MCP]?: boolean;
   [TeamPreference.DisabledEmbeds]?: string[];
   [TeamPreference.PersonalDocs]?: boolean;
+  [TeamPreference.BilingualEditor]?: boolean;
+  [TeamPreference.GrammarChecking]?: boolean;
+  [TeamPreference.GrammarLevel]?: "default" | "picky";
+  [TeamPreference.GrammarDisabledRules]?: string;
+  [TeamPreference.TranslationTrigger]?: "dot" | "selection" | "off";
 };

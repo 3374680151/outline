@@ -8,6 +8,10 @@ import AsyncMultiplayerEditor from "~/scenes/Document/components/AsyncMultiplaye
  * scene's chunk without importing the routes themselves.
  */
 export const Archive = lazy(() => import("~/scenes/Archive"));
+export const Bilingual = lazy(() => import("~/scenes/Bilingual"));
+export const BilingualDocument = lazy(
+  () => import("~/scenes/BilingualDocument")
+);
 export const Collection = lazy(() => import("~/scenes/Collection"));
 export const Document = lazy(() => import("~/scenes/Document"));
 export const Drafts = lazy(() => import("~/scenes/Drafts"));

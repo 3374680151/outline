@@ -140,6 +140,12 @@ function AuthenticatedRoutes() {
                 path={`/doc/${documentSlug}/history/:revisionId?`}
                 component={Scenes.Document.Component}
               />
+              <Route
+                exact
+                path={`/doc/${documentSlug}/bilingual`}
+                component={Scenes.BilingualDocument.Component}
+              />
+              <Route exact path="/bilingual" component={Scenes.Bilingual.Component} />
 
               <Route
                 exact

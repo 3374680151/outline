@@ -12,6 +12,7 @@ import presentFileOperation from "./fileOperation";
 import presentGroup from "./group";
 import presentGroupMembership from "./groupMembership";
 import presentGroupUser from "./groupUser";
+import presentBilingualPair from "./bilingualPair";
 import presentImport from "./import";
 import presentIntegration from "./integration";
 import presentMembership from "./membership";
@@ -40,6 +41,7 @@ export {
   presentAttachment,
   presentAuthenticationProvider,
   presentAvailableTeam,
+  presentBilingualPair,
   presentCollection,
   presentComment,
   presentDocument,

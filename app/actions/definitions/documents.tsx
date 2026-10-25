@@ -27,8 +27,8 @@ import {
   PublishIcon,
   CommentIcon,
   CopyIcon,
-  PadlockIcon,
   GlobeIcon,
+  PadlockIcon,
   LogoutIcon,
   CaseSensitiveIcon,
   OrderedListIcon,
@@ -88,6 +88,7 @@ import {
   TrashSection,
 } from "~/actions/sections";
 import { setPersistedState } from "~/hooks/usePersistedState";
+import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
 import {
   documentHistoryPath,
@@ -947,6 +948,36 @@ export const duplicateDocument = createAction({
         />
       ),
     });
+  },
+});
+
+export const openBilingualEditor = createAction({
+  name: ({ t }) => t("Bilingual editor"),
+  analyticsName: "Open bilingual editor",
+  section: ActiveDocumentSection,
+  icon: <GlobeIcon />,
+  keywords: "translate chinese bilingual english 中文 翻译",
+  visible: ({ activeDocumentId, stores }) =>
+    !!activeDocumentId && stores.policies.abilities(activeDocumentId).update,
+  perform: async ({ activeDocumentId, t }) => {
+    if (!activeDocumentId) {
+      return;
+    }
+
+    try {
+      await BilingualStore.createPair({ documentId: activeDocumentId });
+    } catch (_err) {
+      // Most likely the document is already part of a pair; continue to
+      // open whatever pair exists below.
+    }
+
+    const info = await BilingualStore.fetchInfo(activeDocumentId);
+
+    if (info.pair) {
+      history.push(`/doc/${info.pair.sourceDocumentId}/bilingual`);
+    } else {
+      toast.message(t("Bilingual editing is unavailable for this document"));
+    }
   },
 });
 

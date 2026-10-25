@@ -25,6 +25,7 @@ import documentCreator, {
   authorizeDocumentCreate,
   authorizeDocumentPublish,
 } from "@server/commands/documentCreator";
+import bilingualPairDeleter from "@server/commands/bilingualPairDeleter";
 import documentDuplicator from "@server/commands/documentDuplicator";
 import documentLoader from "@server/commands/documentLoader";
 import documentMover from "@server/commands/documentMover";
@@ -46,6 +47,7 @@ import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
 import {
   Attachment,
+  BilingualPair,
   Relationship,
   Collection,
   Document,
@@ -1732,6 +1734,16 @@ router.post(
 
       if (reason !== undefined) {
         document.deprecatedReason = reason || null;
+      }
+
+      // A bilingual pair deletes as one unit: cascade to the mirror document
+      // and the pair row so no dangling twin is left behind.
+      const pair = await BilingualPair.findForDocument(document.id, {
+        transaction,
+      });
+
+      if (pair) {
+        await bilingualPairDeleter(ctx, pair, document.id);
       }
 
       await document.destroyWithCtx(ctx);

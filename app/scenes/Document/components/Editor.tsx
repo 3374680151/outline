@@ -40,6 +40,13 @@ import { decodeURIComponentSafe } from "~/utils/urls";
 import MultiplayerEditor from "./AsyncMultiplayerEditor";
 import DocumentMeta from "./DocumentMeta";
 import DocumentTitle from "./DocumentTitle";
+import HoverTranslateExtension from "~/editor/extensions/HoverTranslate";
+import GrammarCheckExtension from "~/editor/extensions/GrammarCheck";
+import {
+  grammarCheckingEnabled,
+  grammarLevel,
+  translationTrigger,
+} from "~/utils/bilingual/prefs";
 import { first } from "es-toolkit/compat";
 import useShare from "@shared/hooks/useShare";
 import CodeWordBreak from "@shared/editor/extensions/CodeWordBreak";
@@ -221,6 +228,19 @@ function DocumentEditor(props: Props) {
 
   const direction = titleRef.current?.getComputedDirection();
 
+  const editorExtensions = React.useMemo(
+    () => [
+      ...extensions,
+      new HoverTranslateExtension({ mode: translationTrigger() }),
+      new GrammarCheckExtension({
+        enabled: grammarCheckingEnabled(),
+        level: grammarLevel(),
+        language: "en-US",
+      }),
+    ],
+    []
+  );
+
   return (
     <Flex auto column>
       <DocumentTitle
@@ -293,7 +313,7 @@ function DocumentEditor(props: Props) {
               ? document.getPreference(DocumentPreference.HeadingPrefix)
               : undefined
           }
-          extensions={extensions}
+          extensions={editorExtensions}
           editorStyle={editorStyle}
           {...rest}
           canComment={commentingEnabled && can.comment}
