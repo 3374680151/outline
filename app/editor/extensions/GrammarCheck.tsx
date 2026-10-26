@@ -256,6 +256,12 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     if (batch.length === 0) {
       this.notifyIssueCount();
+
+      // The whole batch was skipped but a tail may remain queued.
+      if (this.queue.size > 0) {
+        this.scheduleCheck();
+      }
+
       return;
     }
 

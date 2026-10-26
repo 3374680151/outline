@@ -491,7 +491,12 @@ export class MirrorEngine {
     this.translateQueue.clear();
 
     const replaceable = allQueued.filter((index) => {
-      const node = sourceView.state.doc.child(index);
+      // Bounds-guarded: a queued index can go stale when blocks are deleted
+      // concurrently during the translate debounce.
+      const node =
+        index < sourceView.state.doc.childCount
+          ? sourceView.state.doc.child(index)
+          : undefined;
       return (
         node && isTextReplaceable(node) && node.textContent.trim().length > 0
       );
