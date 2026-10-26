@@ -46,7 +46,8 @@ function candidates(): TranslationProvider[] {
 
 /**
  * Translates a batch of texts, trying the configured providers in order and
- * falling through to the next on failure.
+ * falling through to the next on failure. Batches larger than the active
+ * provider's maxBatch are split into sequential requests.
  *
  * @param texts The texts to translate.
  * @param from Optional source language hint.
@@ -66,14 +67,23 @@ export async function translateWithFallback(
 
   for (const provider of providers) {
     try {
-      const result = await provider.translate({
-        texts,
-        from,
-        to,
-        signal,
-      });
+      const results: string[] = [];
+      let detectedFrom: string | undefined;
+
+      for (let i = 0; i < texts.length; i += provider.maxBatch) {
+        const chunk = texts.slice(i, i + provider.maxBatch);
+        const result = await provider.translate({
+          texts: chunk,
+          from,
+          to,
+          signal,
+        });
+        results.push(...result.results);
+        detectedFrom = detectedFrom ?? result.detectedFrom;
+      }
+
       cooldowns.delete(provider.id);
-      return { ...result, detectedFrom: result.detectedFrom ?? from };
+      return { results, detectedFrom: detectedFrom ?? from };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       cooldowns.set(provider.id, Date.now() + COOLDOWN_MS);

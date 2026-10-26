@@ -18,6 +18,12 @@ export interface BlockRange {
 const TEXT_REPLACEABLE = new Set(["paragraph", "heading"]);
 
 /**
+ * Transaction meta marking writes dispatched by the bilingual mirror engine,
+ * so the target editor can distinguish engine writes from human typing.
+ */
+export const MIRROR_WRITE_META = "bilingual-mirror-write";
+
+/**
  * Returns the range of the top-level block at the given index.
  *
  * @param view The editor view.
@@ -105,6 +111,7 @@ export function replaceBlockText(
   const content = text ? [schema.text(text)] : [];
   const replacement = range.node.type.createChecked(range.node.attrs, content);
   const tr = view.state.tr.replaceWith(range.from, range.to, replacement);
+  tr.setMeta(MIRROR_WRITE_META, true);
 
   view.dispatch(tr);
   return true;

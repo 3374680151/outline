@@ -5,10 +5,8 @@ import type { BilingualBlockState } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import Logger from "~/utils/Logger";
 import { textHash } from "./hash";
-import {
-  applyBlockOps,
-  diffTopLevelBlocks,
-} from "./blockDiff";
+import { canAutoWrite, reduceBlockState } from "./statusMachine";
+import { applyBlockOps, diffTopLevelBlocks } from "./blockDiff";
 import type { BlockSignature } from "./blockDiff";
 import {
   blockText,
@@ -30,6 +28,9 @@ const PERSIST_DEBOUNCE_MS = 3000;
 
 /** Delay before the single retry of a write that hit a focused block. */
 const WRITE_RETRY_MS = 3000;
+
+/** Maximum blocks translated in one batch. */
+const MAX_TRANSLATE_BATCH = 20;
 
 const emptyState = (): BilingualBlockState => ({
   status: "empty",
@@ -54,8 +55,11 @@ export class MirrorEngine {
   @observable
   hasMismatch = false;
 
-  /** Set of block indexes currently queued for translation. */
+  /** Set of block indexes whose mirror content was written by a human. */
   private humanEdited = new Set<number>();
+
+  /** Set of block indexes queued for a forced (guard-bypassing) rewrite. */
+  private forced = new Set<number>();
 
   private sourceView: EditorView | null = null;
   private targetView: EditorView | null = null;
@@ -128,26 +132,16 @@ export class MirrorEngine {
   /**
    * Handles local transactions on the source document: schedules the
    * structural mirror and the translation pipeline.
-   *
-   * @param _trs The applied transactions (unused, state is read from the view).
-   * @param oldState Ignored; signatures are recomputed from the current view.
-   * @param newState The state after the transactions.
    */
-  handleLocalTransactions = (
-    _trs: readonly Transaction[],
-    _oldState: unknown,
-    newState: { doc: unknown }
-  ) => {
+  handleLocalTransactions = () => {
     if (this.destroyed || !this.sourceView) {
       return;
     }
 
-    //(newState.doc must be the same document the view now holds.)
-    void newState;
-
     if (this.structureTimer) {
       clearTimeout(this.structureTimer);
     }
+
     this.structureTimer = setTimeout(() => {
       this.structureTimer = null;
       this.mirrorStructure();
@@ -185,24 +179,25 @@ export class MirrorEngine {
     const signatures = viewBlockSignatures(sourceView);
     const ops = diffTopLevelBlocks(this.lastSignatures, signatures);
 
-    if (ops.length > 0) {
-      for (const op of ops) {
-        this.applyStructureOp(targetView, op);
-      }
+    this.lastSignatures = signatures;
 
-      this.blockStates = applyBlockOps(this.blockStates, ops, (insert) =>
-        insert.signature.type === "code_fence" ||
-        insert.signature.type === "code_block"
-          ? { ...emptyState(), status: "skipped" }
-          : emptyState()
-      );
-      this.lastSignatures = viewBlockSignatures(sourceView);
-      this.lastTextHashes = viewBlockTextHashes(sourceView, textHash);
-      this.schedulePersist();
-      this.checkConsistency();
-    } else {
-      this.lastSignatures = signatures;
+    if (ops.length === 0) {
+      return;
     }
+
+    for (const op of ops) {
+      this.applyStructureOp(targetView, op);
+    }
+
+    this.blockStates = applyBlockOps(this.blockStates, ops, (insert) =>
+      insert.signature.type === "code_fence" || insert.signature.type === "code_block"
+        ? { ...emptyState(), status: "skipped" }
+        : emptyState()
+    );
+    // Text hash refresh is intentionally left to detectTextChanges, which
+    // runs right after and queues the newly inserted or shifted blocks.
+    this.schedulePersist();
+    this.checkConsistency();
   }
 
   /**
@@ -230,24 +225,22 @@ export class MirrorEngine {
         from += doc.child(i).nodeSize;
       }
 
-      view.dispatch(view.state.tr.delete(from, from + doc.child(op.index).nodeSize));
+      view.dispatch(
+        view.state.tr.delete(from, from + doc.child(op.index).nodeSize)
+      );
       return;
     }
 
     const schema = view.state.schema;
     const nodeType =
-      op.signature.type === "heading"
-        ? schema.nodes.heading
-        : schema.nodes.paragraph;
+      op.signature.type === "heading" ? schema.nodes.heading : schema.nodes.paragraph;
 
     if (!nodeType) {
       return;
     }
 
     const node = nodeType.createChecked(
-      op.signature.type === "heading"
-        ? { level: op.signature.level ?? 1 }
-        : null,
+      op.signature.type === "heading" ? { level: op.signature.level ?? 1 } : null,
       []
     );
     const position =
@@ -268,10 +261,11 @@ export class MirrorEngine {
 
   /**
    * Detects per-block text changes and queues translation for blocks whose
-   * source text changed.
+   * source text changed since their last translation.
    */
   private detectTextChanges() {
     const sourceView = this.sourceView;
+    const targetView = this.targetView;
 
     if (!sourceView) {
       return;
@@ -280,25 +274,27 @@ export class MirrorEngine {
     const hashes = viewBlockTextHashes(sourceView, textHash);
     let queued = false;
 
-    for (let i = 0; i < Math.min(hashes.length, this.lastTextHashes.length); i++) {
-      if (hashes[i] !== this.lastTextHashes[i]) {
-        const state = this.blockStates[i] ?? emptyState();
-        const targetView = this.targetView;
-        const targetText = targetView ? blockText(targetView, i) : "";
-        const nextState = {
-          ...state,
-          status:
-            this.humanEdited.has(i) || (state.autoText && targetText !== state.autoText)
-              ? "stale"
-              : "empty",
-        } as BilingualBlockState;
+    for (let i = 0; i < hashes.length; i++) {
+      const state = this.blockStates[i] ?? emptyState();
 
-        if (nextState.status === "empty") {
-          this.translateQueue.add(i);
-          queued = true;
-        }
+      // Unchanged since the last translation (covers blocks that only
+      // shifted position after a structural edit).
+      if (hashes[i] === this.lastTextHashes[i] || hashes[i] === state.sourceHash) {
+        continue;
+      }
 
-        this.blockStates[i] = nextState;
+      const targetText = targetView ? blockText(targetView, i) : "";
+      const nextState = reduceBlockState(state, this.humanEdited.has(i), {
+        type: "sourceTextChanged",
+        targetMatchesAuto: targetText === state.autoText,
+        sourceHash: hashes[i],
+      });
+
+      this.blockStates[i] = nextState;
+
+      if (nextState.status === "empty") {
+        this.translateQueue.add(i);
+        queued = true;
       }
     }
 
@@ -328,82 +324,99 @@ export class MirrorEngine {
         const node = sourceView.state.doc.child(index);
         return node && isTextReplaceable(node);
       })
-      .slice(0, 20);
+      .slice(0, MAX_TRANSLATE_BATCH);
 
     indexes.forEach((index) => this.translateQueue.delete(index));
 
-    if (indexes.length === 0) {
-      return;
-    }
+    if (indexes.length > 0) {
+      const batch = indexes.map((index) => ({
+        index,
+        hash: textHash(blockText(sourceView, index)),
+        text: blockText(sourceView, index),
+        // The mirror text this write is allowed to replace: the previous
+        // auto text (or anything when the write is forced).
+        expected:
+          this.blockStates[index]?.autoText ?? "",
+        forced: this.forced.has(index),
+      }));
+      batch.forEach((item) => this.forced.delete(item.index));
+      const translatable = batch.filter((item) => item.text.trim().length > 0);
 
-    const batch = indexes.map((index) => ({
-      index,
-      hash: textHash(blockText(sourceView, index)),
-      text: blockText(sourceView, index),
-    }));
-    const translatable = batch.filter((item) => item.text.trim().length > 0);
+      this.blockStates = this.blockStates.map((state, i) => {
+        const item = batch.find((entry) => entry.index === i);
 
-    this.blockStates = this.blockStates.map((state, i) =>
-      indexes.includes(i) && translatable.some((item) => item.index === i)
-        ? { ...state, status: "pending" }
-        : state
-    );
-    this.schedulePersist();
-
-    if (translatable.length === 0) {
-      return;
-    }
-
-    let results: string[];
-
-    try {
-      results = await BilingualStore.translate(
-        translatable.map((item) => item.text)
-      );
-    } catch (err) {
-      Logger.warn("bilingual translate failed", { err });
-      this.blockStates = this.blockStates.map((state, i) =>
-        translatable.some((item) => item.index === i)
-          ? { ...state, status: "failed", error: "translation failed" }
-          : state
-      );
+        return item && translatable.includes(item)
+          ? reduceBlockState(state, false, {
+              type: "translationStarted",
+              sourceHash: item.hash,
+            })
+          : state;
+      });
       this.schedulePersist();
-      return;
-    }
 
-    for (let i = 0; i < translatable.length; i++) {
-      const item = translatable[i];
-      const translated = results[i] ?? "";
+      if (translatable.length > 0) {
+        let results: string[];
 
-      // Stale guard: the source text changed between request and response.
-      if (textHash(blockText(sourceView, item.index)) !== item.hash) {
-        this.translateQueue.add(item.index);
-        continue;
+        try {
+          results = await BilingualStore.translate(
+            translatable.map((item) => item.text)
+          );
+        } catch (err) {
+          Logger.warn("bilingual translate failed", { err });
+          this.blockStates = this.blockStates.map((state, i) =>
+            translatable.some((item) => item.index === i)
+              ? reduceBlockState(state, this.humanEdited.has(i), {
+                  type: "translationFailed",
+                  message: "translation failed",
+                })
+              : state
+          );
+          this.schedulePersist();
+          return;
+        }
+
+        for (let i = 0; i < translatable.length; i++) {
+          const item = translatable[i];
+          const translated = results[i] ?? "";
+
+          // Stale guard: the source text changed between request and
+          // response, so re-queue instead of writing a mismatched text.
+          if (textHash(blockText(sourceView, item.index)) !== item.hash) {
+            this.translateQueue.add(item.index);
+            continue;
+          }
+
+          const state = this.blockStates[item.index] ?? emptyState();
+          this.blockStates[item.index] = reduceBlockState(state, false, {
+            type: "translationSucceeded",
+            sourceHash: item.hash,
+            autoText: translated,
+          });
+          this.humanEdited.delete(item.index);
+          this.writeTarget(item.index, translated, item.expected, item.forced);
+        }
+
+        this.schedulePersist();
       }
-
-      this.blockStates[item.index] = {
-        ...this.blockStates[item.index],
-        status: "auto",
-        sourceHash: item.hash,
-        autoText: translated,
-        error: undefined,
-      };
-      this.humanEdited.delete(item.index);
-      this.writeTarget(item.index, translated, true);
     }
 
-    this.schedulePersist();
+    // The queue may hold more blocks than one batch allows.
+    if (this.translateQueue.size > 0) {
+      this.scheduleTranslate();
+    }
   };
 
   /**
-   * Writes translated text into the target block when allowed. Human-edited
-   * blocks are never overwritten; focused blocks retry once after a delay.
+   * Writes translated text into the target block. The write is only allowed
+   * to replace content that matches `expected` – the text the engine itself
+   * wrote last time – or empty content, so human edits are never clobbered.
    *
    * @param index The target block index.
    * @param text The translated text.
-   * @param retryOnFocus Whether to retry once when the block has focus.
+   * @param expected The mirror text the write expects to find.
+   * @param forced Whether to bypass the human edit guard.
    */
-  private writeTarget(index: number, text: string, retryOnFocus: boolean) {
+  private writeTarget(index: number, text: string, expected: string, forced: boolean) {
     const targetView = this.targetView;
 
     if (!targetView) {
@@ -411,10 +424,10 @@ export class MirrorEngine {
     }
 
     if (selectionIntersectsBlock(targetView, index)) {
-      if (retryOnFocus) {
+      if (!this.forced.has(index)) {
         setTimeout(() => {
           if (!this.destroyed) {
-            this.writeTarget(index, text, false);
+            this.writeTarget(index, text, expected, forced);
           }
         }, WRITE_RETRY_MS);
       }
@@ -425,10 +438,14 @@ export class MirrorEngine {
     const current = blockText(targetView, index);
     const state = this.blockStates[index] ?? emptyState();
 
-    // Only content that is machine written (or empty) may be replaced.
-    if (current.length > 0 && current !== state.autoText) {
+    if (!forced && !canAutoWrite({ ...state, autoText: expected }, current)) {
+      // The mirror content was written by a human – keep it.
       this.humanEdited.add(index);
-      this.blockStates[index] = { ...state, status: "manual" };
+      this.blockStates[index] = reduceBlockState(
+        state,
+        true,
+        { type: "targetManuallyEdited" }
+      );
       return;
     }
 
@@ -455,11 +472,11 @@ export class MirrorEngine {
 
     replaceBlockText(targetView, index, text);
     this.humanEdited.delete(index);
-    this.blockStates[index] = {
-      status: "auto",
-      sourceHash,
-      autoText: text,
-    };
+    this.blockStates[index] = reduceBlockState(
+      this.blockStates[index] ?? emptyState(),
+      false,
+      { type: "translationSucceeded", sourceHash, autoText: text }
+    );
     this.schedulePersist();
   }
 
@@ -481,18 +498,20 @@ export class MirrorEngine {
    * Queues a block for translation immediately (used by re-translate).
    *
    * @param index The source block index.
-   * @param force Whether to bypass the human edit guard.
+   * @param force Whether to bypass the human edit guard on write.
    */
   retranslate(index: number, force: boolean) {
+    const state = this.blockStates[index] ?? emptyState();
+
     if (force) {
       this.humanEdited.delete(index);
+      this.forced.add(index);
+      this.blockStates[index] = reduceBlockState(state, false, {
+        type: "retranslateConfirmed",
+        sourceHash: state.sourceHash,
+      });
     }
 
-    const state = this.blockStates[index] ?? emptyState();
-    this.blockStates[index] = {
-      ...state,
-      status: force ? "empty" : state.status,
-    };
     this.translateQueue.add(index);
     this.scheduleTranslate();
   }
@@ -504,6 +523,15 @@ export class MirrorEngine {
    */
   markHumanEdited(index: number) {
     this.humanEdited.add(index);
+    const state = this.blockStates[index] ?? emptyState();
+
+    if (state.status !== "pending") {
+      this.blockStates[index] = reduceBlockState(
+        state,
+        true,
+        { type: "targetManuallyEdited" }
+      );
+    }
   }
 
   /**
@@ -569,10 +597,7 @@ export class MirrorEngine {
     }
 
     const sourceSigs = viewBlockSignatures(sourceView);
-    const ops = diffTopLevelBlocks(
-      viewBlockSignatures(targetView),
-      sourceSigs
-    );
+    const ops = diffTopLevelBlocks(viewBlockSignatures(targetView), sourceSigs);
 
     for (const op of ops) {
       this.applyStructureOp(targetView, op);

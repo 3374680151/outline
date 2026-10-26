@@ -1990,6 +1990,7 @@ export const rootDocumentActions = [
   unsubscribeDocument,
   searchInDocument,
   duplicateDocument,
+  openBilingualEditor,
   leaveDocument,
   moveDocumentToCollection,
   openRandomDocument,

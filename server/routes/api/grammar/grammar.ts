@@ -22,6 +22,7 @@ const GRAMMAR_CACHE_TTL = Hour.seconds;
  *
  * @param language The language long code.
  * @param level The rule level.
+ * @param mode The rule mode.
  * @param disabledRules The disabled rule ids.
  * @param text The checked text.
  * @returns The cache key.
@@ -29,11 +30,12 @@ const GRAMMAR_CACHE_TTL = Hour.seconds;
 function grammarCacheKey(
   language: string,
   level: string,
+  mode: string,
   disabledRules: string,
   text: string
 ): string {
   const hash = createHash("sha256")
-    .update(`${language}:${level}:${disabledRules}:${text}`)
+    .update(`${language}:${level}:${mode}:${disabledRules}:${text}`)
     .digest("hex");
   return `grammar:${hash}`;
 }
@@ -55,7 +57,7 @@ router.post(
       .filter((entry) => !!entry)
       .join(",");
 
-    const cacheKey = grammarCacheKey(language, level, allDisabled, text);
+    const cacheKey = grammarCacheKey(language, level, mode, allDisabled, text);
     const cached = await CacheHelper.getData<{
       available: boolean;
       reason?: string;

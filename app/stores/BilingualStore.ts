@@ -178,11 +178,16 @@ class BilingualStore {
    *
    * @param texts The texts to translate.
    * @param to The target language, defaults to zh.
+   * @param provider Optional provider id; omitted uses the fallback chain.
    * @returns The translated texts, index parallel to the input.
    */
-  translate = async (texts: string[], to = "zh"): Promise<string[]> => {
+  translate = async (
+    texts: string[],
+    to = "zh",
+    provider?: string
+  ): Promise<string[]> => {
     const res = await client.post("/translations.translate", {
-      body: { texts, to },
+      body: { texts, to, ...(provider ? { provider } : {}) },
     });
     return res.data.results as string[];
   };

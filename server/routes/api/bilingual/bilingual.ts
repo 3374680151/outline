@@ -104,14 +104,18 @@ router.post(
     });
 
     // Titles are resolved with a separate query rather than an eager load,
-    // which would drag in the Document model's default scopes.
+    // which would drag in the Document model's default scopes. The userId
+    // scope restricts results to documents the requesting user can read, so
+    // titles of private documents never leak to other members.
     const documentIds = [
       ...new Set(
         pairs.flatMap((pair) => [pair.sourceDocumentId, pair.targetDocumentId])
       ),
     ];
-    const documents = await Document.findAll({
-      where: { id: documentIds },
+    const documents = await Document.findByIds(documentIds, {
+      userId: user.id,
+      includeState: false,
+      includeViews: false,
       attributes: ["id", "title", "collectionId"],
     });
     const documentsById = new Map(documents.map((doc) => [doc.id, doc]));

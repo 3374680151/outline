@@ -71,9 +71,9 @@ describe("pmRangeForOffset", () => {
     expect(range?.crossesGap).toBe(true);
   });
 
-  it("returns null for a match ending on a gap boundary", () => {
-    // "ab" is 0..2, the gap sits at 2, so a match ending exactly at 2 has no
-    // containing text entry on the end side.
+  it("maps a match ending exactly at a text node boundary", () => {
+    // "ab" is 0..2, the gap sits at 2, so a match ending exactly at 2 maps
+    // its end back into the "ab" text node.
     const range = pmRangeForOffset(map, 1, 1);
     expect(range).toEqual({ pmStart: 2, pmEnd: 3, crossesGap: false });
   });

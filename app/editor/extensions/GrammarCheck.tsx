@@ -8,6 +8,7 @@ import depths from "@shared/styles/depths";
 import type { GrammarMatchDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import GrammarTooltip from "~/editor/components/GrammarTooltip";
+import Logger from "~/utils/Logger";
 import { blockRange, blockRangeInDoc } from "~/utils/bilingual/editorBlocks";
 import { textHash } from "~/utils/bilingual/hash";
 import { pmRangeForOffset } from "~/utils/bilingual/offsetTable";
@@ -16,6 +17,7 @@ import {
   mountReactOverlay,
 } from "~/utils/bilingual/overlay";
 import { buildParagraphMapFromNode } from "~/utils/bilingual/prosemirrorText";
+import { ensureBilingualStyles } from "~/utils/bilingual/styles";
 
 /**
  * Options for the grammar check extension.
@@ -148,11 +150,15 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
             this.buildDecorationSet(state.doc),
         },
         view: (editorView) => {
+          // Underlines and issue dots render through raw DOM decorations, so
+          // the stylesheet is injected from here rather than from a scene.
+          ensureBilingualStyles();
+
           // Check the initial document content.
           for (let i = 0; i < editorView.state.doc.childCount; i++) {
             this.queue.add(i);
           }
-          this.scheduleCheck();
+          void this.flush();
 
           return {
             destroy: () => {
@@ -253,18 +259,31 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     }
 
     const ignored = GrammarCheckExtension.ignoredRules().join(",");
-    const results = await Promise.all(
-      batch.map(async (item) => {
-        const result = await BilingualStore.grammarCheck({
-          text: item.text,
-          language: this.options.language,
-          level: this.options.level,
-          mode: "all",
-          disabledRules: ignored || undefined,
-        });
-        return { item, result };
-      })
-    );
+
+    let results: {
+      item: { index: number; text: string; hash: string };
+      result: { available: boolean; reason?: string; matches?: unknown[] };
+    }[];
+
+    try {
+      results = await Promise.all(
+        batch.map(async (item) => {
+          const result = await BilingualStore.grammarCheck({
+            text: item.text,
+            language: this.options.language,
+            level: this.options.level,
+            mode: "all",
+            disabledRules: ignored || undefined,
+          });
+          return { item, result };
+        })
+      );
+    } catch (err) {
+      // Network failure: drop this round quietly; the next edit re-queues
+      // the blocks and the server-side breaker protects the sidecar.
+      Logger.warn("grammar check failed", { err });
+      return;
+    }
 
     const currentDoc = this.editor?.view?.state.doc;
 

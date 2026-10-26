@@ -48,6 +48,7 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [providers, setProviders] = React.useState<
     { id: string; label: string; configured: boolean }[]
   >([]);
+  const [providerId, setProviderId] = React.useState<string>("");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState({ left: 0, top: 0, above: false });
 
@@ -59,15 +60,19 @@ export const TranslatePopover = observer(function TranslatePopover(
       setError(null);
 
       try {
-        const [translated] = await BilingualStore.translate([text]);
-        const providers = await BilingualStore.fetchProviders();
+        const [translated] = await BilingualStore.translate(
+          [text],
+          "zh",
+          providerId || undefined
+        );
+        const configuredProviders = await BilingualStore.fetchProviders();
 
         if (cancelled) {
           return;
         }
 
         setResult(translated);
-        setProviders(providers.filter((provider) => provider.configured));
+        setProviders(configuredProviders.filter((provider) => provider.configured));
       } catch (_err) {
         if (!cancelled) {
           setError(t("Translation failed"));
@@ -84,7 +89,7 @@ export const TranslatePopover = observer(function TranslatePopover(
     return () => {
       cancelled = true;
     };
-  }, [text, t]);
+  }, [text, providerId, t]);
 
   React.useEffect(() => {
     // Measure after first paint so the clamp uses the real size.
@@ -156,11 +161,9 @@ export const TranslatePopover = observer(function TranslatePopover(
         </LangLabel>
         {providers.length > 0 && (
           <ServiceSelect
-            onChange={(event) => {
-              void event.currentTarget.value;
-            }}
+            onChange={(event) => setProviderId(event.currentTarget.value)}
             aria-label={t("Translation service")}
-            defaultValue=""
+            value={providerId}
           >
             <option value="">{t("Automatic")}</option>
             {providers.map((provider) => (

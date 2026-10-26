@@ -47,6 +47,7 @@ import {
   grammarLevel,
   translationTrigger,
 } from "~/utils/bilingual/prefs";
+import { TeamPreference } from "@shared/types";
 import { first } from "es-toolkit/compat";
 import useShare from "@shared/hooks/useShare";
 import CodeWordBreak from "@shared/editor/extensions/CodeWordBreak";
@@ -233,12 +234,14 @@ function DocumentEditor(props: Props) {
       ...extensions,
       new HoverTranslateExtension({ mode: translationTrigger() }),
       new GrammarCheckExtension({
-        enabled: grammarCheckingEnabled(),
+        enabled:
+          grammarCheckingEnabled() &&
+          (team?.getPreference(TeamPreference.GrammarChecking) ?? true),
         level: grammarLevel(),
         language: "en-US",
       }),
     ],
-    []
+    [team]
   );
 
   return (

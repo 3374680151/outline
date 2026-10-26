@@ -32,5 +32,8 @@ export default async function bilingualPairDeleter(
     await twin.destroyWithCtx(ctx);
   }
 
-  await pair.destroy({ transaction });
+  // The pair row carries no user content, so it is hard deleted: a soft
+  // deleted row would still hold the unique document indexes and permanently
+  // block re-pairing after a restore from trash.
+  await pair.destroy({ force: true, transaction });
 }

@@ -1,7 +1,11 @@
 import { action, observable } from "mobx";
+import { observer } from "mobx-react";
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
 import Extension from "@shared/editor/lib/Extension";
+import { s } from "@shared/styles";
 import depths from "@shared/styles/depths";
 import TranslatePopover, {
   type TranslatePopoverProps,
@@ -305,44 +309,87 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
     }
   });
 
+  // The widget must always render an element: ExtensionManager collects
+  // widgets once at editor init, and the observer component below re-renders
+  // itself whenever the observable dot state changes.
   widget = () => {
-    if (this.options.mode === "off" || !this.dot) {
+    if (this.options.mode === "off") {
       return undefined;
     }
 
-    const dot = this.dot;
-
-    return (
-      <button
-        type="button"
-        aria-label="Translate"
-        onClick={() => {
-          if (this.editor) {
-            this.openPopover(this.editor.props.id as string);
-          }
-        }}
-        style={{
-          position: "fixed",
-          left: Math.min(
-            Math.max(VIEWPORT_INSET, dot.left),
-            window.innerWidth - VIEWPORT_INSET - 24
-          ),
-          top: Math.min(
-            Math.max(VIEWPORT_INSET, dot.top),
-            window.innerHeight - VIEWPORT_INSET - 24
-          ),
-          width: 8,
-          height: 8,
-          minWidth: 8,
-          minHeight: 8,
-          padding: 0,
-          borderRadius: "50%",
-          border: "1px solid rgba(255, 255, 255, 0.8)",
-          background: "#0366d6",
-          cursor: "pointer",
-        }}
-        className="bilingual-translate-dot"
-      />
-    );
+    return <TranslateDot extension={this} />;
   };
 }
+
+/**
+ * The floating dot button, rendered inside the editor's React tree so the
+ * theme context and i18n are available. Positioned fixed relative to the
+ * viewport with a generous touch hit area around the small visual dot.
+ */
+const TranslateDot = observer(function TranslateDot({
+  extension,
+}: {
+  extension: HoverTranslateExtension;
+}) {
+  const { t } = useTranslation();
+  const dot = extension.dot;
+
+  if (!dot) {
+    return null;
+  }
+
+  const left = Math.min(
+    Math.max(VIEWPORT_INSET, dot.left),
+    window.innerWidth - VIEWPORT_INSET - HIT_AREA
+  );
+  const top = Math.min(
+    Math.max(VIEWPORT_INSET, dot.top),
+    window.innerHeight - VIEWPORT_INSET - HIT_AREA
+  );
+
+  return (
+    <DotButton
+      $left={left}
+      $top={top}
+      aria-label={t("Translate")}
+      onClick={() => {
+        if (extension.editor) {
+          extension.openPopover(extension.editor.props.id as string);
+        }
+      }}
+    >
+      <DotVisual />
+    </DotButton>
+  );
+});
+
+/** Visual size of the dot itself, in pixels. */
+const DOT_SIZE = 8;
+
+/** Size of the clickable/touchable area around the dot, in pixels. */
+const HIT_AREA = 28;
+
+const DotButton = styled.button<{ $left: number; $top: number }>`
+  position: fixed;
+  left: ${(props) => props.$left}px;
+  top: ${(props) => props.$top}px;
+  width: ${HIT_AREA}px;
+  height: ${HIT_AREA}px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+`;
+
+const DotVisual = styled.span`
+  width: ${DOT_SIZE}px;
+  height: ${DOT_SIZE}px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: ${s("accent")};
+`;
+

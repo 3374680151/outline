@@ -2,6 +2,7 @@ import { Plugin } from "prosemirror-state";
 import { ySyncPluginKey } from "y-prosemirror";
 import Extension from "@shared/editor/lib/Extension";
 import BilingualStore from "~/stores/BilingualStore";
+import { MIRROR_WRITE_META } from "~/utils/bilingual/editorBlocks";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
 
 /**
@@ -47,15 +48,20 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
             const isLocal = trs.every((tr) => !tr.getMeta(ySyncPluginKey));
 
             if (isLocal) {
-              engine.handleLocalTransactions(trs, _oldState, _newState);
+              engine.handleLocalTransactions();
             } else {
               engine.handleRemoteTransactions();
             }
           } else {
             const isLocal = trs.every((tr) => !tr.getMeta(ySyncPluginKey));
+            const isEngineWrite = trs.some((tr) =>
+              tr.getMeta(MIRROR_WRITE_META)
+            );
 
-            if (isLocal) {
-              // A human typed into the mirror document: protect the block.
+            // A human typed into the mirror document: protect that block
+            // from future overwrites. Writes dispatched by the engine itself
+            // carry the mirror meta and must not be mistaken for edits.
+            if (isLocal && !isEngineWrite) {
               const index = _newState.selection
                 ? _newState.selection.$from.index(0)
                 : -1;
