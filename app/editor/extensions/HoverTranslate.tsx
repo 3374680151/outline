@@ -113,14 +113,17 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
             }),
           },
         },
-        view: (editorView) => {
+        view: () => {
           const handleScroll = action(() => {
             // The anchor is frozen once shown; hide on scroll rather than
-            // risk pointing at the wrong text.
+            // risk pointing at the wrong text. Capture phase is required:
+            // the scrolling container is an ancestor of the editor, and
+            // scroll events do not bubble.
             this.hideDot();
           });
 
-          editorView.dom.addEventListener("scroll", handleScroll, {
+          document.addEventListener("scroll", handleScroll, {
+            capture: true,
             passive: true,
           });
 
@@ -140,7 +143,9 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
               }
             },
             destroy: () => {
-              editorView.dom.removeEventListener("scroll", handleScroll);
+              document.removeEventListener("scroll", handleScroll, {
+                capture: true,
+              });
               this.removeDot();
               this.closePopover();
 

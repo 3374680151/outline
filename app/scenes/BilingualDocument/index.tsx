@@ -173,16 +173,39 @@ function BilingualDocumentScene(props: Props) {
     }
   };
 
-  const handleTitleChange = async (value: string) => {
-    if (!sourceDocument) {
-      return;
+  const titleSaveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(
+    () => () => {
+      if (titleSaveTimer.current) {
+        clearTimeout(titleSaveTimer.current);
+      }
+    },
+    []
+  );
+
+  const handleTitleChange = (value: string) => {
+    const sourceId = sourceDocument?.id;
+    const targetId = targetDocument?.id;
+
+    // Debounced: fires once typing settles rather than per keystroke.
+    if (titleSaveTimer.current) {
+      clearTimeout(titleSaveTimer.current);
     }
 
-    await sourceDocument.save({ title: value });
+    titleSaveTimer.current = setTimeout(() => {
+      titleSaveTimer.current = null;
+      const source = sourceId ? documents.get(sourceId) : undefined;
+      const target = targetId ? documents.get(targetId) : undefined;
 
-    if (targetDocument) {
-      await targetDocument.save({ title: value });
-    }
+      if (source) {
+        void source.save({ title: value });
+      }
+
+      if (target) {
+        void target.save({ title: value });
+      }
+    }, 500);
   };
 
   if (!document || loading) {

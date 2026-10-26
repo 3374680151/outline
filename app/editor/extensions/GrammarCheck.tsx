@@ -225,10 +225,11 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     }
 
     const doc = view.state.doc;
-    const indexes = [...this.queue]
-      .filter((index) => index < doc.childCount)
-      .slice(0, MAX_BLOCKS_PER_FLUSH);
-    indexes.forEach((index) => this.queue.delete(index));
+    const queued = [...this.queue].filter((index) => index < doc.childCount);
+    this.queue.clear();
+    const indexes = queued.slice(0, MAX_BLOCKS_PER_FLUSH);
+    // Any remainder goes back in the queue; the next flush picks it up.
+    queued.slice(MAX_BLOCKS_PER_FLUSH).forEach((index) => this.queue.add(index));
 
     const batch: { index: number; text: string; hash: string }[] = [];
 
@@ -329,6 +330,11 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
       this.notifyIssueCount();
     });
+
+    // Large documents exceed one flush; keep draining the queue.
+    if (this.queue.size > 0) {
+      this.scheduleCheck();
+    }
   }
 
   /**
@@ -484,14 +490,6 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     const map = buildParagraphMapFromNode(range.node, range.from);
     return pmRangeForOffset(map, match.offset, match.length);
-  }
-
-  /**
-   * Whether a match spans a non-text inline node and cannot be auto-fixed.
-   */
-  private isCrossGap(match: GrammarMatchDTO, blockIndex: number, matchTextHash: string) {
-    const resolved = this.resolveRange(match, blockIndex, matchTextHash);
-    return !resolved || resolved.crossesGap;
   }
 
   /**
