@@ -1,5 +1,4 @@
 import { observable, runInAction } from "mobx";
-import type { Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { BilingualBlockState } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
