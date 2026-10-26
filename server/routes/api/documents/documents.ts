@@ -25,6 +25,7 @@ import documentCreator, {
   authorizeDocumentCreate,
   authorizeDocumentPublish,
 } from "@server/commands/documentCreator";
+import bilingualPairDeleter from "@server/commands/bilingualPairDeleter";
 import documentDuplicator from "@server/commands/documentDuplicator";
 import documentLoader from "@server/commands/documentLoader";
 import documentMover from "@server/commands/documentMover";
@@ -46,6 +47,7 @@ import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
 import {
   Attachment,
+  BilingualPair,
   Relationship,
   Collection,
   Document,
@@ -965,8 +967,7 @@ router.post(
   auth(),
   validate(T.DocumentsExportSchema),
   async (ctx: APIContext<T.DocumentsExportReq>) => {
-    const { id, signedUrls, includeChildDocuments, includeTranslations } =
-      ctx.input.body;
+    const { id, signedUrls, includeChildDocuments } = ctx.input.body;
     const { user } = ctx.state.auth;
     const accept = ctx.request.headers["accept"];
 
@@ -1028,7 +1029,6 @@ router.post(
         signedUrls,
         teamId: user.teamId,
         commonMark: true,
-        excludeTranslations: includeTranslations === false,
       });
 
     // A TextBundle is a directory of files, so unlike the other formats it has
@@ -1736,6 +1736,16 @@ router.post(
         document.deprecatedReason = reason || null;
       }
 
+      // A bilingual pair deletes as one unit: cascade to the mirror document
+      // and the pair row so no dangling twin is left behind.
+      const pair = await BilingualPair.findForDocument(document.id, {
+        transaction,
+      });
+
+      if (pair) {
+        await bilingualPairDeleter(ctx, pair, document.id);
+      }
+
       await document.destroyWithCtx(ctx);
     }
 
@@ -1975,14 +1985,10 @@ router.post(
       UserMemberships.length ? UserMemberships[0].index : null
     );
 
-    let membership = await UserMembership.findOne({
-      where: {
-        documentId: id,
-        userId,
-      },
-      lock: transaction.LOCK.UPDATE,
-      ...ctx.context,
-    });
+    let membership = await UserMembership.findOneForUpdate(
+      { documentId: id, userId },
+      { transaction }
+    );
 
     if (membership) {
       if (permission) {
@@ -2090,14 +2096,10 @@ router.post(
     authorize(user, "manageUsers", document);
     authorize(user, "read", group);
 
-    let membership = await GroupMembership.findOne({
-      where: {
-        documentId: id,
-        groupId,
-      },
-      lock: transaction.LOCK.UPDATE,
-      ...ctx.context,
-    });
+    let membership = await GroupMembership.findOneForUpdate(
+      { documentId: id, groupId },
+      { transaction }
+    );
 
     if (membership) {
       if (permission) {

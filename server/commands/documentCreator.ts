@@ -27,6 +27,7 @@ type Props = Optional<
     | "preferences"
     | "sourceMetadata"
     | "editorVersion"
+    | "language"
     | "publishedAt"
     | "createdAt"
     | "updatedAt"
@@ -180,6 +181,7 @@ export default async function documentCreator(
     // allows override for import
     updatedAt,
     editorVersion,
+    language,
     publishedAt,
     sourceMetadata,
     createdById,
@@ -248,6 +250,7 @@ export default async function documentCreator(
     preferences,
     icon: icon ?? template?.icon,
     color: color ?? template?.color,
+    language,
     title: titleWithReplacements,
     content: contentWithReplacements,
     state,

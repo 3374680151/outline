@@ -1,186 +1,161 @@
+import { createHash } from "node:crypto";
 import Router from "@koa/router";
-import { UserRole } from "@shared/types";
-import { ValidationError } from "@server/errors";
-import Logger from "@server/logging/Logger";
+import { Day } from "@shared/utils/time";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
-import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
-import { Team } from "@server/models";
-import { authorize } from "@server/policies";
-import { presentPolicies, presentTeam } from "@server/presenters";
+import Logger from "@server/logging/Logger";
+import { CacheHelper } from "@server/utils/CacheHelper";
+import { InvalidRequestError, InternalError } from "@server/errors";
 import type { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
-import { translateFree } from "@server/utils/translation/free";
+import {
+  getConfiguredProvider,
+  listProviders,
+  translateWithFallback,
+} from "@server/services/translation/registry";
 import * as T from "./schema";
 
 const router = new Router();
 
-/** Prompt modeled on the MIT-licensed openai-translator project. */
-const TRANSLATION_SYSTEM_PROMPT = `You are a highly skilled translation engine. Translate the user's text into the language indicated by its BCP-47 tag. Output only the translation, with no explanations, quotes, or surrounding text. Preserve the original meaning, tone, formatting, and line breaks. If the text is already in the target language, return it unchanged.`;
-
-const REQUEST_TIMEOUT_MS = 60_000;
-
-type TranslationConfig = {
-  baseUrl: string;
-  model: string;
-  targetLanguage: string;
-  apiKey: string;
-};
+/** Cache expiry for translation results. */
+const TRANSLATION_CACHE_TTL = Day.seconds;
 
 /**
- * Calls the configured OpenAI-compatible chat completions API and returns the
- * translated text.
- *
- * @param text The text to translate.
- * @param config The workspace translation configuration.
- * @param sourceLanguage The BCP-47 source language tag, or "auto".
- * @returns The translated text.
- * @throws ValidationError When the upstream service fails or times out.
+ * Matches text that contains only CJK characters, CJK punctuation, digits,
+ * and whitespace – translating it into Chinese is a no-op, so it is passed
+ * through without an upstream call.
  */
-async function translateText(
-  text: string,
-  config: TranslationConfig,
-  sourceLanguage: string
-): Promise<string> {
-  const endpoint = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const sourceHint = sourceLanguage === "auto" ? "" : ` from ${sourceLanguage}`;
+const PURE_CJK =
+  /^[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\s\d.,!?;:'"()\-—–…·]+$/;
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Translate the following text${sourceHint} into ${config.targetLanguage}:\n\n${text}`,
-          },
-        ],
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      Logger.warn("Translation service returned an error", {
-        status: response.status,
-        detail: detail.slice(0, 500),
-      });
-      throw ValidationError("The translation service returned an error");
-    }
-
-    const json = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const output = json.choices?.[0]?.message?.content?.trim();
-
-    if (!output) {
-      throw ValidationError("The translation service returned an empty result");
-    }
-
-    return output;
-  } catch (err) {
-    if (err instanceof ValidationError) {
-      throw err;
-    }
-    if (err instanceof Error && err.name === "AbortError") {
-      throw ValidationError("The translation request timed out");
-    }
-    Logger.warn("Unable to reach the translation service", {
-      err,
-    });
-    throw ValidationError("Unable to reach the translation service");
-  } finally {
-    clearTimeout(timeout);
-  }
+/**
+ * Computes the cache key for one translated text.
+ *
+ * @param providerKey The provider id or "chain" for fallback translation.
+ * @param from The source language hint or "auto".
+ * @param to The target language.
+ * @param text The text to translate.
+ * @returns The cache key.
+ */
+function translationCacheKey(
+  providerKey: string,
+  from: string,
+  to: string,
+  text: string
+): string {
+  const hash = createHash("sha256").update(text).digest("hex");
+  return `translation:${providerKey}:${from}:${to}:${hash}`;
 }
 
 router.post(
-  "translations.updateConfig",
-  rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
-  auth({ role: UserRole.Admin }),
-  validate(T.TranslationsUpdateConfigSchema),
-  transaction(),
-  async (ctx: APIContext<T.TranslationsUpdateConfigReq>) => {
-    const { transaction } = ctx.state;
-    const { user } = ctx.state.auth;
-    const { baseUrl, model, targetLanguage, apiKey } = ctx.input.body;
-
-    const team = await Team.findByPk(user.teamId, {
-      lock: transaction.LOCK.UPDATE,
-      transaction,
-    });
-    authorize(user, "update", team);
-
-    team.translationSettings = { baseUrl, model, targetLanguage };
-
-    // An empty key keeps the previously stored key so other settings can be
-    // updated without re-entering the secret.
-    if (apiKey) {
-      team.translationApiKey = apiKey;
-    }
-
-    const updatedTeam = await team.saveWithCtx(ctx);
-
+  "translations.providers",
+  auth(),
+  rateLimiter(RateLimiterStrategy.OneHundredPerMinute),
+  validate(T.TranslationsProvidersSchema),
+  async (ctx: APIContext<T.TranslationsProvidersReq>) => {
     ctx.body = {
-      data: presentTeam(updatedTeam),
-      policies: presentPolicies(user, [updatedTeam]),
+      data: {
+        providers: listProviders(),
+      },
     };
   }
 );
 
 router.post(
   "translations.translate",
-  rateLimiter(RateLimiterStrategy.OneHundredPerMinute),
   auth(),
+  rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
   validate(T.TranslationsTranslateSchema),
   async (ctx: APIContext<T.TranslationsTranslateReq>) => {
-    const {
-      text,
-      sourceLanguage = "auto",
-      targetLanguage: requestedTarget,
-    } = ctx.input.body;
-    const { user } = ctx.state.auth;
+    const { text, texts: bodyTexts, from, to, provider: providerId } =
+      ctx.input.body;
 
-    // A configured LLM takes precedence; otherwise the built-in free provider
-    // pool is used so translation works without any workspace configuration.
-    const config = user.team.getTranslationConfig();
+    const input = bodyTexts ?? (text !== undefined ? [text] : []);
 
-    if (config) {
-      const translated = await translateText(
-        text,
-        {
-          ...config,
-          targetLanguage: requestedTarget ?? config.targetLanguage,
-        },
-        sourceLanguage
-      );
-      ctx.body = {
-        data: {
-          text: translated,
-          engine: "llm",
-        },
-      };
-      return;
+    if (input.length === 0) {
+      throw InvalidRequestError("Either text or texts is required");
     }
 
-    const targetLanguage =
-      requestedTarget ??
-      user.team.translationSettings?.targetLanguage ??
-      "zh-CN";
-    const result = await translateFree(text, sourceLanguage, targetLanguage);
+    const provider = getConfiguredProvider(providerId);
+
+    if (providerId && !provider) {
+      throw InvalidRequestError(
+        `Translation provider "${providerId}" is not configured`
+      );
+    }
+
+    const providerKey = provider?.id ?? "chain";
+    const fromKey = from ?? "auto";
+    const results: (string | undefined)[] = new Array(input.length);
+    const misses: { index: number; text: string; cacheKey: string }[] = [];
+
+    await Promise.all(
+      input.map(async (item, index) => {
+        if (PURE_CJK.test(item)) {
+          // Pure CJK content does not need a round trip to become Chinese.
+          results[index] = item;
+          return;
+        }
+
+        const cacheKey = translationCacheKey(providerKey, fromKey, to, item);
+        const cached = await CacheHelper.getData<string>(cacheKey);
+
+        if (cached !== undefined) {
+          results[index] = cached;
+          return;
+        }
+
+        misses.push({ index, text: item, cacheKey });
+      })
+    );
+
+    if (misses.length > 0) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 65000);
+
+      try {
+        const translated = provider
+          ? await provider.translate({
+              texts: misses.map((miss) => miss.text),
+              from,
+              to,
+              signal: controller.signal,
+            })
+          : await translateWithFallback(
+              misses.map((miss) => miss.text),
+              from,
+              to,
+              controller.signal
+            );
+
+        await Promise.all(
+          misses.map((miss, missIndex) => {
+            const value = translated.results[missIndex];
+            results[miss.index] = value;
+
+            return value
+              ? CacheHelper.setData(
+                  miss.cacheKey,
+                  value,
+                  TRANSLATION_CACHE_TTL
+                )
+              : Promise.resolve();
+          })
+        );
+      } catch (err) {
+        Logger.error("translations.translate failed", err as Error);
+        throw InternalError("Translation failed, please try again later");
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
 
     ctx.body = {
-      data: result,
+      data: {
+        results,
+        to,
+      },
     };
   }
 );

@@ -17,7 +17,7 @@ import {
 export const MAX_AVATAR_DISPLAY = 6;
 
 /** Height of the app's fixed header in pixels. */
-export const HEADER_HEIGHT = 52;
+export const HEADER_HEIGHT = 56;
 
 /** Minimum size of touch targets on mobile in pixels, from Apple's guidelines. */
 export const MOBILE_TOUCH_TARGET = 44;
@@ -107,6 +107,11 @@ export const TeamPreferenceDefaults: TeamPreferences = {
   [TeamPreference.MCP]: true,
   [TeamPreference.DisabledEmbeds]: [],
   [TeamPreference.PersonalDocs]: true,
+  [TeamPreference.BilingualEditor]: true,
+  [TeamPreference.GrammarChecking]: true,
+  [TeamPreference.GrammarLevel]: "default" as const,
+  [TeamPreference.GrammarDisabledRules]: "",
+  [TeamPreference.TranslationTrigger]: "dot" as const,
 };
 
 export const DocumentPreferenceDefaults: DocumentPreferences = {
@@ -121,35 +126,4 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.SortCommentsByOrderInDocument]: true,
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
-  [UserPreference.GrammarLanguage]: "auto",
-  [UserPreference.GrammarAutoCheck]: true,
 };
-
-/** A language offered by the translation feature. */
-export interface TranslationLanguage {
-  /** BCP-47 tag of the language, e.g. zh-CN. */
-  value: string;
-  /** Native label of the language. */
-  label: string;
-}
-
-/** Languages offered for translation, ordered by expected usage. */
-export const translationLanguages: TranslationLanguage[] = [
-  { value: "zh-CN", label: "简体中文" },
-  { value: "zh-TW", label: "繁體中文" },
-  { value: "en-US", label: "English" },
-  { value: "ja-JP", label: "日本語" },
-  { value: "ko-KR", label: "한국어" },
-  { value: "fr-FR", label: "Français" },
-  { value: "de-DE", label: "Deutsch" },
-  { value: "es-ES", label: "Español" },
-  { value: "ru-RU", label: "Русский" },
-  { value: "pt-BR", label: "Português" },
-  { value: "it-IT", label: "Italiano" },
-];
-
-/** Language tag used to request automatic source language detection. */
-export const TRANSLATION_AUTO_DETECT = "auto";
-
-/** Language tag used to request automatic grammar check language detection. */
-export const GRAMMAR_AUTO_DETECT = "auto";

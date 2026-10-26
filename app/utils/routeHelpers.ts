@@ -37,15 +37,6 @@ export function draftsPath(): string {
 }
 
 /**
- * Returns the path to the translation screen.
- *
- * @returns the translate path.
- */
-export function translatePath(): string {
-  return "/translate";
-}
-
-/**
  * Returns the path to the archive screen.
  *
  * @returns the archive path.
@@ -187,6 +178,36 @@ export function documentHistoryPath(
     base += `/${revisionId}`;
   }
   return base;
+}
+
+/**
+ * Returns the path to a document's bilingual editor.
+ *
+ * @param doc the document to open in the bilingual editor.
+ * @returns the path to the bilingual editor screen.
+ */
+export function documentBilingualPath(doc: Document): string {
+  return `${documentPath(doc)}/bilingual`;
+}
+
+/**
+ * Returns the path to the bilingual editor for a document id, which the
+ * document route resolves directly.
+ *
+ * @param documentId The document id (either side of a bilingual pair).
+ * @returns The bilingual editor path.
+ */
+export function bilingualEditorPathById(documentId: string): string {
+  return `/doc/${documentId}/bilingual`;
+}
+
+/**
+ * Returns the path to the bilingual documents index.
+ *
+ * @returns the path to the bilingual documents index screen.
+ */
+export function bilingualHomePath(): string {
+  return "/bilingual";
 }
 
 /**
@@ -350,6 +371,9 @@ export const matchDocumentSlug =
 
 /** Route matcher for the document edit screen. */
 export const matchDocumentEdit = `/doc/${matchDocumentSlug}/edit`;
+
+/** Route matcher for the document bilingual editor screen. */
+export const matchDocumentBilingual = `/doc/${matchDocumentSlug}/bilingual`;
 
 /** Route matcher for the document history screen. */
 export const matchDocumentHistory = `/doc/${matchDocumentSlug}/history/:revisionId?`;

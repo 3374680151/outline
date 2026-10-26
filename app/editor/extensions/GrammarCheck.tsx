@@ -1,601 +1,639 @@
-import { action, comparer, makeObservable, observable, reaction } from "mobx";
-import type { Node as ProsemirrorNode } from "prosemirror-model";
-import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
+import { observable, runInAction } from "mobx";
+import { Plugin, PluginKey } from "prosemirror-state";
+import type { EditorState, Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
-import scrollIntoView from "scroll-into-view-if-needed";
-import { GRAMMAR_AUTO_DETECT } from "@shared/constants";
-import { UserPreference } from "@shared/types";
-import { errToString } from "@shared/utils/error";
+import type { EditorView } from "prosemirror-view";
+import type { Node as ProseMirrorNode } from "prosemirror-model";
 import Extension from "@shared/editor/lib/Extension";
-import { mapDecorations } from "@shared/editor/lib/multiplayer";
-import stores from "~/stores";
-import { client } from "~/utils/ApiClient";
+import depths from "@shared/styles/depths";
+import type { GrammarMatchDTO } from "@shared/types/bilingual";
+import BilingualStore from "~/stores/BilingualStore";
+import GrammarTooltip from "~/editor/components/GrammarTooltip";
+import Logger from "~/utils/Logger";
+import { blockRange, blockRangeInDoc } from "~/utils/bilingual/editorBlocks";
+import { textHash } from "~/utils/bilingual/hash";
+import { pmRangeForOffset } from "~/utils/bilingual/offsetTable";
 import {
-  applyGrammarFix,
-  collectGrammarBlocks,
-  filterGrammarMatches,
-  grammarIssueKind,
-  isCheckableText,
-  locateGrammarRange,
-  locateInBlock,
-  type GrammarBlock,
-  type GrammarMatch,
-} from "~/utils/documentGrammar";
-import GrammarCard from "../components/GrammarCard";
+  clampPanelPosition,
+  mountReactOverlay,
+} from "~/utils/bilingual/overlay";
+import { buildParagraphMapFromNode } from "~/utils/bilingual/prosemirrorText";
+import { ensureBilingualStyles } from "~/utils/bilingual/styles";
+import { matchType } from "~/utils/bilingual/matchType";
 
-const pluginKey = new PluginKey<DecorationSet>("grammar-check");
-
-/** Delay after the last document change before changed blocks are checked. */
-const CHECK_DEBOUNCE_MS = 1200;
-
-/** One grammar, spelling or style issue located in the document. */
-export interface GrammarIssue {
-  /** Identifies the issue within its checked block */
-  key: string;
-  /** Document position of the flagged text start */
-  from: number;
-  /** Document position of the flagged text end */
-  to: number;
-  /** The flagged text */
-  text: string;
-  /** The reported match */
-  match: GrammarMatch;
-  /** The checked block text the match offsets refer to */
-  unitText: string;
+/**
+ * Options for the grammar check extension.
+ */
+interface GrammarCheckOptions {
+  /** Whether checking is enabled for this editor. */
+  enabled: boolean;
+  /** Rule level, "default" or "picky". */
+  level: "default" | "picky";
+  /** Language long code, e.g. en-US. */
+  language: string;
+  /** Notified when the total issue count changes. */
+  onIssueCountChange?: (count: number) => void;
 }
 
-/** Status of a grammar checking pass. */
-export type GrammarStatus = "idle" | "loading" | "error";
+/** A stored raw match relative to its paragraph text. */
+interface RawMatch {
+  match: GrammarMatchDTO;
+  /** Hash of the paragraph text at check time. */
+  textHash: string;
+}
 
-interface GrammarCheckResponse {
-  data: {
-    matches: GrammarMatch[];
-    detectedLanguage?: string;
-    incompleteResults?: boolean;
-  };
+/** Debounce for grammar checks after typing, in milliseconds. */
+const CHECK_DEBOUNCE_MS = 700;
+
+/** Minimum text length before a block is checked. */
+const MIN_CHECK_LENGTH = 8;
+
+/** Maximum blocks checked in one flush. */
+const MAX_BLOCKS_PER_FLUSH = 40;
+
+/** localStorage key holding ignored rule ids. */
+const IGNORED_RULES_KEY = "bilingual-grammar-ignored-rules";
+
+/** Visual class per LanguageTool category. */
+function categoryClass(match: GrammarMatchDTO): string {
+  return `bilingual-grammar-${matchType(match)}`;
 }
 
 /**
- * Underlines grammar, spelling and style issues in the document text and
- * opens the official-style correction card when an underline is clicked.
- * Checking runs while editing, driven by the user's grammar preferences,
- * independent of the assistant pane.
+ * Grammar check extension: extracts paragraph text, proxies it through the
+ * Outline grammar API (LanguageTool), and renders underline decorations plus
+ * clickable sentence issue dots. One-click fixes are ordinary transactions
+ * so they participate in undo.
  */
-export default class GrammarCheckExtension extends Extension {
-  public get name() {
-    return "grammar-check";
+export default class GrammarCheckExtension extends Extension<GrammarCheckOptions> {
+  /** Total open issue count across the document. */
+  @observable
+  issueCount = 0;
+
+  /** Whether the grammar service is currently unavailable. */
+  @observable
+  unavailable = false;
+
+  private key = new PluginKey<DecorationSet>("bilingual-grammar");
+  private matchesByBlock = new Map<number, RawMatch[]>();
+  private sentHashByBlock = new Map<number, string>();
+  private queue = new Set<number>();
+  private checkTimer: ReturnType<typeof setTimeout> | null = null;
+  private tooltipOverlay: ReturnType<typeof mountReactOverlay> | null = null;
+
+  get defaultOptions(): GrammarCheckOptions {
+    return { enabled: false, level: "default", language: "en-US" };
   }
 
-  constructor() {
-    super();
-    makeObservable(this);
+  get name() {
+    return "bilingual-grammar-check";
   }
 
-  /** Issues of the current document, in document order. */
-  @observable
-  public issues: GrammarIssue[] = [];
+  get allowInReadOnly() {
+    return false;
+  }
 
-  /** Status of the current checking pass. */
-  @observable
-  public status: GrammarStatus = "idle";
+  /**
+   * The rule ids the user has chosen to ignore.
+   *
+   * @returns The ignored rule ids.
+   */
+  static ignoredRules(): string[] {
+    try {
+      const raw = localStorage.getItem(IGNORED_RULES_KEY);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  }
 
-  /** Error of the last failed checking pass. */
-  @observable
-  public error: string | undefined = undefined;
+  /**
+   * Persists an ignored rule id.
+   *
+   * @param ruleId The rule id to ignore.
+   * @returns The updated ignored rule ids.
+   */
+  static addIgnoredRule(ruleId: string): string[] {
+    const rules = [...new Set([...GrammarCheckExtension.ignoredRules(), ruleId])];
+    localStorage.setItem(IGNORED_RULES_KEY, JSON.stringify(rules));
+    return rules;
+  }
 
-  /** The issue whose correction card is shown. */
-  @observable
-  public activeIssue: GrammarIssue | null = null;
+  get plugins() {
+    if (!this.options.enabled) {
+      return [];
+    }
 
-  /** Detected language of each checked block, keyed by block text. */
-  @observable
-  public detectedLanguages = observable.map<string, string>();
-
-  /** Whether the last check returned only partial results. */
-  @observable
-  public incompleteResults = false;
-
-  /** Checked blocks keyed by text, guards against duplicate requests. */
-  private results = new Map<string, GrammarMatch[]>();
-
-  /** Sequence counter so superseded checking passes stop early. */
-  private checkSeq = 0;
-
-  /** Debounce timer of the scheduled check. */
-  private checkTimer: ReturnType<typeof setTimeout> | undefined;
-
-  public get plugins() {
     return [
-      new Plugin({
-        key: pluginKey,
-        view: () => {
-          // Preferences that change what the service checks invalidate all
-          // cached results; dictionary and disabled rules are filtered when
-          // issues are rebuilt instead.
-          const disposer = reaction(
-            () => this.affectingPreferences(),
-            () => {
-              this.results.clear();
-              this.detectedLanguages.clear();
-              this.scheduleCheck();
-            },
-            { equals: comparer.structural }
-          );
-
-          // Pick up blocks of a document that was already populated when the
-          // view mounted, as no docChanged transaction will follow.
-          this.scheduleCheck();
-
-          return {
-            destroy: () => {
-              disposer();
-              if (this.checkTimer) {
-                clearTimeout(this.checkTimer);
-              }
-            },
-          };
-        },
+      new Plugin<DecorationSet>({
+        key: this.key,
         state: {
           init: () => DecorationSet.empty,
-          apply: (tr, decorationSet, _oldState, newState) => {
-            if (tr.getMeta(pluginKey)) {
-              return this.createDecorationSet(newState.doc);
-            }
-
+          apply: (tr, value, oldState, newState) => {
             if (tr.docChanged) {
-              this.scheduleCheck();
-              // mapDecorations handles remote (Yjs) transactions, whose
-              // mapping cannot be applied naively.
-              return mapDecorations(decorationSet, tr, newState);
+              this.scheduleRecheck(oldState, newState);
             }
 
-            return decorationSet;
+            return value;
           },
         },
         props: {
-          decorations: (state) => pluginKey.getState(state),
-          // mouseup rather than click: the Mermaid extension's click handler
-          // claims every click, so later plugins never see click events.
+          decorations: (state: EditorState) =>
+            this.buildDecorationSet(state.doc),
           handleDOMEvents: {
-            mouseup: (_view, event) => this.handleClick(event),
+            // Clicking an underline opens its issue card, matching the
+            // grammar web workbench where every highlight is clickable.
+            mousedown: (view: EditorView, event: MouseEvent) => {
+              const target = event.target as HTMLElement;
+
+              if (!target.classList?.contains("bilingual-underline")) {
+                return false;
+              }
+
+              const coords = view.posAtCoords({
+                left: event.clientX,
+                top: event.clientY,
+              });
+
+              if (!coords) {
+                return false;
+              }
+
+              const blockIndex = view.state.doc.resolve(coords.pos).index(0);
+              const rawMatches = this.matchesByBlock.get(blockIndex) ?? [];
+
+              for (const raw of rawMatches) {
+                const range = blockRangeInDoc(view.state.doc, blockIndex);
+
+                if (!range) {
+                  break;
+                }
+
+                const map = buildParagraphMapFromNode(range.node, range.from);
+                const resolved = pmRangeForOffset(
+                  map,
+                  raw.match.offset,
+                  raw.match.length
+                );
+
+                if (
+                  resolved &&
+                  coords.pos >= resolved.pmStart &&
+                  coords.pos <= resolved.pmEnd
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  this.openTooltip(raw.match, blockIndex, raw.textHash);
+                  return true;
+                }
+              }
+
+              return false;
+            },
           },
+        },
+        view: (editorView) => {
+          // Underlines and issue dots render through raw DOM decorations, so
+          // the stylesheet is injected from here rather than from a scene.
+          ensureBilingualStyles();
+
+          // Check the initial document content.
+          for (let i = 0; i < editorView.state.doc.childCount; i++) {
+            this.queue.add(i);
+          }
+          void this.flush();
+
+          return {
+            destroy: () => {
+              if (this.checkTimer) {
+                clearTimeout(this.checkTimer);
+              }
+
+              this.closeTooltip();
+            },
+          };
         },
       }),
     ];
   }
 
-  public widget = () => <GrammarCard extension={this} />;
-
-  /** Re-runs the grammar check over unchecked blocks now. */
-  public checkNow() {
-    void this.runCheck();
-  }
-
   /**
-   * Opens the correction card of an issue and scrolls it into view.
+   * Schedules a recheck of blocks whose text changed between two states.
    *
-   * @param issue The issue to reveal.
+   * @param oldState The state before the transactions.
+   * @param newState The state after the transactions.
    */
-  @action
-  public focusIssue(issue: GrammarIssue) {
-    this.openIssue(issue);
-    const view = this.editor?.view;
-    const located = view
-      ? locateGrammarRange(view.state.doc, {
-          unitText: issue.unitText,
-          offset: issue.match.offset,
-          length: issue.match.length,
-        })
-      : undefined;
+  private scheduleRecheck(oldState: EditorState, newState: EditorState) {
+    const oldDoc = oldState.doc;
+    const newDoc = newState.doc;
+    const max = Math.max(oldDoc.childCount, newDoc.childCount);
 
-    if (view && located) {
-      const domAtPos = view.domAtPos(located.from);
-      const element =
-        domAtPos.node instanceof Element
-          ? domAtPos.node
-          : domAtPos.node.parentElement;
+    for (let i = 0; i < max; i++) {
+      const oldText = i < oldDoc.childCount ? oldDoc.child(i).textContent : null;
+      const newText = i < newDoc.childCount ? newDoc.child(i).textContent : null;
 
-      if (element) {
-        scrollIntoView(element, {
-          scrollMode: "if-needed",
-          block: "center",
-        });
+      if (oldText !== newText) {
+        this.matchesByBlock.delete(i);
+        this.sentHashByBlock.delete(i);
+        this.queue.add(i);
       }
     }
-  }
 
-  /** Closes the correction card. */
-  @action
-  public closeCard() {
-    this.activeIssue = null;
+    this.notifyIssueCount();
+    this.scheduleCheck();
   }
 
   /**
-   * Applies a replacement suggestion to the document and re-checks the
-   * changed block.
-   *
-   * @param issue The issue to fix.
-   * @param replacement The replacement text.
-   * @returns True when the document was modified.
-   */
-  @action
-  public applySuggestion(issue: GrammarIssue, replacement: string): boolean {
-    const editor = this.editor;
-
-    if (!editor) {
-      return false;
-    }
-
-    const applied = applyGrammarFix(editor, {
-      unitText: issue.unitText,
-      offset: issue.match.offset,
-      length: issue.match.length,
-      replacement,
-    });
-
-    if (applied) {
-      this.activeIssue = null;
-      this.results.delete(issue.unitText);
-      void this.runCheck();
-    }
-
-    return applied;
-  }
-
-  /**
-   * Turns the rule the issue was reported by off for the user and removes its
-   * issues immediately.
-   *
-   * @param issue The issue whose rule to ignore.
-   */
-  public async ignoreRule(issue: GrammarIssue) {
-    const ruleId = issue.match.ruleId;
-    const user = stores.auth?.user;
-
-    if (!ruleId || !user) {
-      return;
-    }
-
-    const current =
-      user.preferences?.[UserPreference.GrammarDisabledRules] ?? [];
-
-    if (!current.includes(ruleId)) {
-      user.setPreference(UserPreference.GrammarDisabledRules, [
-        ...current,
-        ruleId,
-      ]);
-      await user.save();
-    }
-
-    this.activeIssue = null;
-    this.rebuildIssues();
-  }
-
-  /**
-   * Adds the flagged word to the user's personal dictionary so it is never
-   * reported as a misspelling again.
-   *
-   * @param issue The misspelled issue.
-   */
-  public async addToDictionary(issue: GrammarIssue) {
-    const word = issue.text;
-    const user = stores.auth?.user;
-
-    if (!word || !user) {
-      return;
-    }
-
-    const current = user.preferences?.[UserPreference.GrammarDictionary] ?? [];
-
-    if (!current.includes(word)) {
-      user.setPreference(UserPreference.GrammarDictionary, [...current, word]);
-      await user.save();
-    }
-
-    this.activeIssue = null;
-    this.rebuildIssues();
-  }
-
-  /**
-   * Measures the on-screen rect of an issue's flagged text, for anchoring the
-   * correction card.
-   *
-   * @param issue The issue to measure.
-   * @returns The rect, or undefined when it cannot be measured.
-   */
-  public measureIssueRect(issue: GrammarIssue): DOMRect | undefined {
-    const view = this.editor?.view;
-
-    if (!view) {
-      return undefined;
-    }
-
-    try {
-      const fromPos = view.coordsAtPos(issue.from);
-      const toPos = view.coordsAtPos(issue.to, -1);
-      const top = Math.min(fromPos.top, toPos.top);
-      const bottom = Math.max(fromPos.bottom, toPos.bottom);
-      const left = Math.min(fromPos.left, toPos.left);
-      const right = Math.max(fromPos.right, toPos.right);
-      return new DOMRect(left, top, right - left, bottom - top);
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Returns the language the issue's block was detected as, when known.
-   *
-   * @param issue The issue to look up.
-   * @returns The detected BCP-47 tag, or undefined.
-   */
-  public issueLanguage(issue: GrammarIssue): string | undefined {
-    return this.detectedLanguages.get(issue.unitText);
-  }
-
-  /**
-   * Returns the preferences that change what the service checks, as a
-   * structurally comparable value.
-   *
-   * @returns The affecting preference values.
-   */
-  private affectingPreferences() {
-    const user = stores.auth?.user;
-    return [
-      user?.getPreference(UserPreference.GrammarLanguage),
-      user?.preferences?.[UserPreference.GrammarMotherTongue],
-      user?.getPreference(UserPreference.GrammarPickyLevel),
-      user?.preferences?.[UserPreference.GrammarDisabledCategories],
-    ];
-  }
-
-  /**
-   * Schedules a debounced check of the document, unless automatic checking
-   * is turned off in the user's preferences.
+   * Debounces the check queue flush.
    */
   private scheduleCheck() {
-    const user = stores.auth?.user;
-    const autoCheck = user
-      ? user.getPreference(UserPreference.GrammarAutoCheck)
-      : true;
-
-    if (!autoCheck) {
-      return;
-    }
-
     if (this.checkTimer) {
       clearTimeout(this.checkTimer);
     }
+
     this.checkTimer = setTimeout(() => {
-      this.checkTimer = undefined;
-      void this.runCheck();
+      this.checkTimer = null;
+      void this.flush();
     }, CHECK_DEBOUNCE_MS);
   }
 
-  /** Checks every unchecked block of the document and rebuilds the issues. */
-  @action
-  private async runCheck() {
-    const view = this.editor?.view;
-    const user = stores.auth?.user;
-
-    if (!view || !user) {
-      return;
-    }
-
-    const seq = ++this.checkSeq;
-    const blocks = collectGrammarBlocks(view.state.doc).filter((block) =>
-      isCheckableText(block.text)
-    );
-    const pending = blocks.filter((block) => !this.results.has(block.text));
-
-    this.rebuildIssues(blocks);
-
-    if (pending.length === 0) {
-      this.status = "idle";
-      return;
-    }
-
-    this.status = "loading";
-    this.error = undefined;
-
-    const language = user.getPreference(UserPreference.GrammarLanguage);
-    const motherTongue = user.preferences?.[UserPreference.GrammarMotherTongue];
-    const picky = user.getPreference(UserPreference.GrammarPickyLevel);
-    const disabledCategories =
-      user.preferences?.[UserPreference.GrammarDisabledCategories] ?? [];
-    const disabledRules =
-      user.preferences?.[UserPreference.GrammarDisabledRules] ?? [];
-
-    const body = {
-      text: "",
-      language: language || GRAMMAR_AUTO_DETECT,
-      ...(motherTongue ? { motherTongue } : {}),
-      ...(picky ? { level: "picky" as const } : {}),
-      ...(disabledCategories.length ? { disabledCategories } : {}),
-      ...(disabledRules.length ? { disabledRules } : {}),
-    };
-
-    let incomplete = false;
-
-    for (const block of pending) {
-      if (seq !== this.checkSeq) {
-        return;
-      }
-
-      try {
-        const res = await client.post<GrammarCheckResponse>("/grammar.check", {
-          ...body,
-          text: block.text,
-        });
-
-        if (seq !== this.checkSeq) {
-          return;
-        }
-
-        this.results.set(block.text, res.data.matches);
-        incomplete = incomplete || !!res.data.incompleteResults;
-
-        if (res.data.detectedLanguage) {
-          this.detectedLanguages.set(block.text, res.data.detectedLanguage);
-        }
-      } catch (err) {
-        if (seq !== this.checkSeq) {
-          return;
-        }
-        this.status = "error";
-        this.error = errToString(err);
-        return;
-      }
-    }
-
-    if (seq !== this.checkSeq) {
-      return;
-    }
-
-    this.status = "idle";
-    this.incompleteResults = incomplete;
-    this.rebuildIssues();
-  }
-
   /**
-   * Rebuilds the located issues from the cached check results. Dictionary
-   * words and disabled rules are filtered with the current preferences.
-   *
-   * @param blocks The blocks of the current document, when already collected.
+   * Sends queued paragraphs to the grammar proxy and applies the results.
    */
-  @action
-  private rebuildIssues(blocks?: GrammarBlock[]) {
-    const doc = this.editor?.view.state.doc;
+  private async flush() {
+    const view = this.editor?.view;
 
-    if (!doc) {
+    if (!view) {
       return;
     }
 
-    const user = stores.auth?.user;
-    const dictionary = user?.preferences?.[UserPreference.GrammarDictionary];
-    const disabledRules =
-      user?.preferences?.[UserPreference.GrammarDisabledRules];
-    const current = blocks ?? collectGrammarBlocks(doc);
-    const issues: GrammarIssue[] = [];
+    const doc = view.state.doc;
+    const queued = [...this.queue].filter((index) => index < doc.childCount);
+    this.queue.clear();
+    const indexes = queued.slice(0, MAX_BLOCKS_PER_FLUSH);
+    // Any remainder goes back in the queue; the next flush picks it up.
+    queued.slice(MAX_BLOCKS_PER_FLUSH).forEach((index) => this.queue.add(index));
 
-    for (const block of current) {
-      const matches = this.results.get(block.text);
+    const batch: { index: number; text: string; hash: string }[] = [];
 
-      if (!matches) {
+    for (const index of indexes) {
+      const node = doc.child(index);
+
+      if (
+        (node.type.name !== "paragraph" && node.type.name !== "heading") ||
+        node.textContent.trim().length < MIN_CHECK_LENGTH
+      ) {
+        this.matchesByBlock.delete(index);
         continue;
       }
 
-      for (const match of filterGrammarMatches(block.text, matches, {
-        dictionary,
-        disabledRules,
-      })) {
-        const segment = locateInBlock(block, match.offset, match.length);
+      const hash = textHash(node.textContent);
 
-        if (!segment) {
+      // Skip blocks already in flight with identical text.
+      if (this.sentHashByBlock.get(index) === hash) {
+        continue;
+      }
+
+      batch.push({ index, text: node.textContent, hash });
+    }
+
+    if (batch.length === 0) {
+      this.notifyIssueCount();
+
+      // The whole batch was skipped but a tail may remain queued.
+      if (this.queue.size > 0) {
+        this.scheduleCheck();
+      }
+
+      return;
+    }
+
+    const ignored = GrammarCheckExtension.ignoredRules().join(",");
+
+    let results: {
+      item: { index: number; text: string; hash: string };
+      result: { available: boolean; reason?: string; matches?: unknown[] };
+    }[];
+
+    try {
+      results = await Promise.all(
+        batch.map(async (item) => {
+          const result = await BilingualStore.grammarCheck({
+            text: item.text,
+            language: this.options.language,
+            level: this.options.level,
+            mode: "all",
+            disabledRules: ignored || undefined,
+          });
+          return { item, result };
+        })
+      );
+    } catch (err) {
+      // Network failure: drop this round quietly; the next edit re-queues
+      // the blocks and the server-side breaker protects the sidecar.
+      Logger.warn("grammar check failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    const currentDoc = this.editor?.view?.state.doc;
+
+    if (!currentDoc) {
+      return;
+    }
+
+    runInAction(() => {
+      this.unavailable = false;
+
+      for (const { item, result } of results) {
+        const node = currentDoc.child(item.index);
+
+        if (!node || textHash(node.textContent) !== item.hash) {
+          // Stale: the paragraph changed while the request was in flight.
+          this.queue.add(item.index);
+          this.scheduleCheck();
           continue;
         }
 
-        issues.push({
-          key: `${block.text}:${match.offset}:${match.length}:${
-            match.ruleId ?? ""
-          }`,
-          from: segment.from,
-          to: segment.to,
-          text: block.text.slice(match.offset, match.offset + match.length),
-          match,
-          unitText: block.text,
-        });
-      }
-    }
+        this.sentHashByBlock.set(item.index, item.hash);
 
-    this.issues = issues;
-    this.refreshDecorations();
-  }
+        if (!result.available) {
+          this.unavailable = true;
+          this.matchesByBlock.delete(item.index);
+          continue;
+        }
 
-  /** Rebuilds the underline decorations from the located issues. */
-  private refreshDecorations() {
-    const view = this.editor?.view;
-
-    if (view) {
-      view.dispatch(view.state.tr.setMeta(pluginKey, { refresh: true }));
-    }
-  }
-
-  /**
-   * Creates the underline decorations of the current issues.
-   *
-   * @param doc The document to decorate.
-   * @returns The decoration set.
-   */
-  private createDecorationSet(doc: ProsemirrorNode): DecorationSet {
-    const decorations = this.issues.map((issue) =>
-      Decoration.inline(issue.from, issue.to, {
-        class: `grammar-issue grammar-${grammarIssueKind(issue.match)}`,
-        "data-grammar-key": issue.key,
-      })
-    );
-
-    return decorations.length
-      ? DecorationSet.create(doc, decorations)
-      : DecorationSet.empty;
-  }
-
-  /**
-   * Opens the correction card of the clicked issue, selecting the flagged
-   * text like the official client does.
-   *
-   * @param issue The issue to open.
-   */
-  @action
-  private openIssue(issue: GrammarIssue) {
-    this.activeIssue = issue;
-    const view = this.editor?.view;
-
-    if (view) {
-      const located = locateGrammarRange(view.state.doc, {
-        unitText: issue.unitText,
-        offset: issue.match.offset,
-        length: issue.match.length,
-      });
-
-      if (located) {
-        view.dispatch(
-          view.state.tr.setSelection(
-            TextSelection.create(view.state.doc, located.from, located.to)
-          )
+        this.matchesByBlock.set(
+          item.index,
+          (result.matches as GrammarMatchDTO[])
+            .filter(
+              (match) =>
+                match.offset >= 0 &&
+                match.offset + match.length <= item.text.length &&
+                !GrammarCheckExtension.ignoredRules().includes(match.rule.id)
+            )
+            .map((match) => ({ match, textHash: item.hash }))
         );
       }
+
+      this.notifyIssueCount();
+    });
+
+    // Matches live outside plugin state, so a transaction is dispatched to
+    // make ProseMirror re-evaluate the decorations prop. An empty
+    // transaction carries no document change and is not undoable.
+    const activeView = this.editor?.view;
+
+    if (activeView && !activeView.isDestroyed) {
+      activeView.dispatch(activeView.state.tr.setMeta("bilingual-grammar-refresh", true));
+    }
+
+    // Large documents exceed one flush; keep draining the queue.
+    if (this.queue.size > 0) {
+      this.scheduleCheck();
     }
   }
 
   /**
-   * Handles a click in the editor, opening the correction card when an
-   * underlined issue was hit.
+   * Builds the decoration set from the stored matches against a document.
    *
-   * @param event The click event.
-   * @returns Whether the click was consumed.
+   * @param doc The current document.
+   * @returns The decorations for all stored matches.
    */
-  private handleClick(event: Event): boolean {
-    if (!(event.target instanceof HTMLElement)) {
+  private buildDecorationSet(doc: ProseMirrorNode): DecorationSet {
+    if (this.matchesByBlock.size === 0) {
+      return DecorationSet.empty;
+    }
+
+    const decorations: Decoration[] = [];
+    const widgetDecorations: Decoration[] = [];
+
+    for (const [index, rawMatches] of this.matchesByBlock) {
+      if (index >= doc.childCount) {
+        continue;
+      }
+
+      const range = blockRangeInDoc(doc, index);
+
+      if (!range) {
+        continue;
+      }
+
+      const map = buildParagraphMapFromNode(range.node, range.from);
+
+      for (const raw of rawMatches) {
+        const resolved = pmRangeForOffset(map, raw.match.offset, raw.match.length);
+
+        if (!resolved) {
+          continue;
+        }
+
+        decorations.push(
+          Decoration.inline(resolved.pmStart, resolved.pmEnd, {
+            class: `bilingual-underline ${categoryClass(raw.match)}`,
+          })
+        );
+      }
+
+      const dotsClass = "bilingual-issue-dots";
+      const matches = rawMatches;
+      // Place the dots inline right after the block's last character so they
+      // ride on the final text line instead of floating between blocks.
+      const inlineEnd = range.from + 1 + range.node.content.size;
+
+      widgetDecorations.push(
+        Decoration.widget(inlineEnd, () => {
+          const container = document.createElement("span");
+          container.className = dotsClass;
+
+          matches.slice(0, 8).forEach((raw) => {
+            const dot = document.createElement("button");
+            dot.type = "button";
+            dot.className = `bilingual-issue-dot ${categoryClass(raw.match)}`;
+            dot.setAttribute("aria-label", raw.match.message);
+            dot.setAttribute("title", raw.match.shortMessage ?? raw.match.message);
+            dot.addEventListener("mousedown", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              this.openTooltip(raw.match, index, raw.textHash);
+            });
+            container.appendChild(dot);
+          });
+
+          return container;
+        }, { key: `issues-${index}-${rawMatches[0]?.textHash ?? ""}-${rawMatches.length}-${rawMatches[0]?.match.rule.id ?? ""}`, side: 10 })
+      );
+    }
+
+    return DecorationSet.create(doc, [...decorations, ...widgetDecorations]);
+  }
+
+  /**
+   * Opens the issue tooltip for a match.
+   *
+   * @param match The grammar match.
+   * @param blockIndex The block the match belongs to.
+   * @param matchTextHash Hash of the block text at check time.
+   */
+  private openTooltip(match: GrammarMatchDTO, blockIndex: number, matchTextHash: string) {
+    const view = this.editor?.view;
+    const resolved = this.resolveRange(match, blockIndex, matchTextHash);
+
+    if (!view || !resolved) {
+      return;
+    }
+
+    this.closeTooltip();
+
+    const anchor = view.coordsAtPos(resolved.pmStart);
+    const overlay = mountReactOverlay(depths.tooltip);
+    this.tooltipOverlay = overlay;
+
+    const handleClose = () => this.closeTooltip();
+
+    const handleIgnore = () => {
+      GrammarCheckExtension.addIgnoredRule(match.rule.id);
+      this.removeMatchesByRule(match.rule.id);
+      handleClose();
+    };
+
+    overlay.render(
+      <GrammarTooltip
+        match={match}
+        canFix={!resolved.crossesGap}
+        replacements={match.replacements.map((replacement) => replacement.value)}
+        onFix={(value) => {
+          const applied = this.applyFix(match, blockIndex, matchTextHash, value);
+
+          if (applied) {
+            handleClose();
+          }
+        }}
+        onIgnore={handleIgnore}
+        onClose={handleClose}
+      />
+    );
+
+    const position = clampPanelPosition(
+      { left: anchor.left, right: anchor.right, top: anchor.top, bottom: anchor.bottom },
+      { width: 320, height: 180 }
+    );
+    overlay.container.style.left = `${position.left}px`;
+    overlay.container.style.top = `${position.top}px`;
+  }
+
+  /**
+   * Resolves the ProseMirror range of a stored match against the live
+   * document.
+   *
+   * @param match The grammar match.
+   * @param blockIndex The block index.
+   * @param matchTextHash The hash of the block text at check time.
+   * @returns The resolved range, or null when unmappable.
+   */
+  private resolveRange(
+    match: GrammarMatchDTO,
+    blockIndex: number,
+    matchTextHash: string
+  ) {
+    const view = this.editor?.view;
+
+    if (!view) {
+      return null;
+    }
+
+    const range = blockRange(view, blockIndex);
+
+    if (!range || textHash(range.node.textContent) !== matchTextHash) {
+      return null;
+    }
+
+    const map = buildParagraphMapFromNode(range.node, range.from);
+    return pmRangeForOffset(map, match.offset, match.length);
+  }
+
+  /**
+   * Applies a replacement for a match as a normal transaction.
+   *
+   * @param match The grammar match.
+   * @param blockIndex The block index.
+   * @param matchTextHash The hash of the block text at check time.
+   * @param value The replacement text.
+   * @returns True when the fix was applied.
+   */
+  private applyFix(
+    match: GrammarMatchDTO,
+    blockIndex: number,
+    matchTextHash: string,
+    value: string
+  ): boolean {
+    const view = this.editor?.view;
+    const resolved = this.resolveRange(match, blockIndex, matchTextHash);
+
+    if (!view || !resolved || resolved.crossesGap) {
       return false;
     }
 
-    const target = event.target.closest<HTMLElement>(".grammar-issue");
+    const tr: Transaction = view.state.tr.replaceWith(
+      resolved.pmStart,
+      resolved.pmEnd,
+      view.state.schema.text(value)
+    );
+    view.dispatch(tr);
 
-    if (!target) {
-      return false;
+    const remaining = (this.matchesByBlock.get(blockIndex) ?? []).filter(
+      (raw) => raw.match !== match
+    );
+    this.matchesByBlock.set(blockIndex, remaining);
+    this.notifyIssueCount();
+    this.queue.add(blockIndex);
+    this.scheduleCheck();
+    return true;
+  }
+
+  /**
+   * Removes all stored matches of a rule (after the user ignores it).
+   *
+   * @param ruleId The ignored rule id.
+   */
+  private removeMatchesByRule(ruleId: string) {
+    for (const [index, rawMatches] of this.matchesByBlock) {
+      const remaining = rawMatches.filter(
+        (raw) => raw.match.rule.id !== ruleId
+      );
+
+      if (remaining.length !== rawMatches.length) {
+        this.matchesByBlock.set(index, remaining);
+      }
     }
 
-    const key = target.getAttribute("data-grammar-key");
-    const issue = key
-      ? this.issues.find((item) => item.key === key)
-      : undefined;
+    this.notifyIssueCount();
+  }
 
-    if (issue) {
-      this.openIssue(issue);
-      return true;
+  /**
+   * Notifies the host about the current issue count.
+   */
+  private notifyIssueCount() {
+    let count = 0;
+
+    for (const rawMatches of this.matchesByBlock.values()) {
+      count += rawMatches.length;
     }
 
-    return false;
+    runInAction(() => {
+      this.issueCount = count;
+    });
+    this.options.onIssueCountChange?.(count);
+  }
+
+  /**
+   * Closes and unmounts the tooltip overlay.
+   */
+  private closeTooltip() {
+    if (this.tooltipOverlay) {
+      this.tooltipOverlay.destroy();
+      this.tooltipOverlay = null;
+    }
   }
 }

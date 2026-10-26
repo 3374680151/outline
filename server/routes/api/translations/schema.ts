@@ -1,31 +1,39 @@
 import { z } from "zod";
-import { BaseSchema } from "../schema";
+import { BaseSchema } from "@server/routes/api/schema";
 
-export const TranslationsUpdateConfigSchema = BaseSchema.extend({
-  body: z.object({
-    /** Base URL of an OpenAI-compatible API, without trailing slash */
-    baseUrl: z.url().max(2048),
-    /** Model name used for translation requests */
-    model: z.string().min(1).max(200),
-    /** BCP-47 tag of the language to translate into */
-    targetLanguage: z.string().min(2).max(35),
-    /** API key. Optional on update so the key can be kept as-is. */
-    apiKey: z.string().min(1).max(400).optional(),
-  }),
+/** Maximum number of texts per request. */
+export const TRANSLATION_MAX_TEXTS = 50;
+
+/** Maximum length of a single text. */
+export const TRANSLATION_MAX_TEXT_LENGTH = 8000;
+
+export const TranslationsProvidersSchema = BaseSchema.extend({
+  body: z.object({}),
 });
 
-export type TranslationsUpdateConfigReq = z.infer<
-  typeof TranslationsUpdateConfigSchema
+export type TranslationsProvidersReq = z.infer<
+  typeof TranslationsProvidersSchema
 >;
 
 export const TranslationsTranslateSchema = BaseSchema.extend({
   body: z.object({
-    /** The text to translate */
-    text: z.string().min(1).max(5000),
-    /** BCP-47 tag of the source language, auto detection when omitted */
-    sourceLanguage: z.string().max(35).optional(),
-    /** BCP-47 tag of the target language, workspace default when omitted */
-    targetLanguage: z.string().min(2).max(35).optional(),
+    /** A single text to translate (shorthand for a one element batch). */
+    text: z.string().max(TRANSLATION_MAX_TEXT_LENGTH).optional(),
+
+    /** A batch of texts to translate. */
+    texts: z
+      .array(z.string().max(TRANSLATION_MAX_TEXT_LENGTH))
+      .max(TRANSLATION_MAX_TEXTS)
+      .optional(),
+
+    /** Source language hint, ISO 639-1. Omit to auto-detect. */
+    from: z.string().max(5).optional(),
+
+    /** Target language, ISO 639-1. Defaults to "zh". */
+    to: z.string().max(5).default("zh"),
+
+    /** Provider to use; omitted uses the configured fallback chain. */
+    provider: z.string().max(64).optional(),
   }),
 });
 

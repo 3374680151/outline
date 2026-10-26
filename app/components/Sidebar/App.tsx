@@ -24,6 +24,7 @@ import TeamLogo from "../TeamLogo";
 import Tooltip from "../Tooltip";
 import Sidebar from "./Sidebar";
 import ArchiveLink from "./components/ArchiveLink";
+import { BilingualLink } from "./components/BilingualLink";
 import Collections from "./components/Collections";
 import DraggableSection, {
   normalizeSidebarSectionOrder,
@@ -40,7 +41,6 @@ import SidebarLink from "./components/SidebarLink";
 import { SidebarNavigationProvider } from "./components/SidebarNavigation";
 import Starred from "./components/Starred";
 import ToggleButton from "./components/ToggleButton";
-import { TranslateLink } from "./components/TranslateLink";
 import TrashLink from "./components/TrashLink";
 import useMobile from "~/hooks/useMobile";
 
@@ -135,7 +135,6 @@ function AppSidebar() {
               onClickIntent={Scenes.Search.preload}
             />
             {can.createDocument && <DraftsLink />}
-            <TranslateLink />
           </Section>
         </Overflow>
         <Scrollable flex shadow ref={setScrollArea}>
@@ -153,6 +152,7 @@ function AppSidebar() {
               )}
             </SidebarNavigationProvider>
             <Section>
+              {can.createDocument && <BilingualLink />}
               {can.createDocument && <TrashLink />}
               <DismissableSidebarAction
                 id="sidebar-import-hidden"

@@ -1,32 +1,36 @@
 import { z } from "zod";
-import { BaseSchema } from "../schema";
+import { BaseSchema } from "@server/routes/api/schema";
+
+/** Maximum length of text accepted in one check request. */
+export const GRAMMAR_MAX_TEXT_LENGTH = 20000;
 
 export const GrammarCheckSchema = BaseSchema.extend({
   body: z.object({
-    /** The text to check */
-    text: z.string().min(1).max(5000),
-    /** BCP-47 tag of the language to check against, auto to detect, auto when omitted */
-    language: z.string().min(2).max(35).optional(),
-    /** The user's native language, enables false-friend hints */
-    motherTongue: z.string().min(2).max(35).optional(),
-    /** Preferred language variants when the language is auto-detected */
-    preferredVariants: z.array(z.string().min(2).max(35)).max(10).optional(),
-    /** The check level, picky enables strict style rules */
-    level: z.enum(["default", "picky"]).optional(),
-    /** Category IDs to disable for this check */
-    disabledCategories: z.array(z.string().min(1).max(100)).max(100).optional(),
-    /** Rule IDs to disable for this check */
-    disabledRules: z.array(z.string().min(1).max(200)).max(1000).optional(),
+    /** The plain text to check. */
+    text: z.string().min(1).max(GRAMMAR_MAX_TEXT_LENGTH),
+
+    /** Language long code, e.g. en-US or en-GB. */
+    language: z
+      .enum(["en-US", "en-GB", "en-AU", "en-CA", "en-NZ", "en-ZA"])
+      .default("en-US"),
+
+    /** Rule level. */
+    level: z.enum(["default", "picky"]).default("default"),
+
+    /** Rule mode; textLevelOnly is faster while typing. */
+    mode: z
+      .enum(["all", "allButTextLevelOnly", "textLevelOnly"])
+      .default("all"),
+
+    /** Additional rule ids to disable for this request. */
+    disabledRules: z.string().max(2000).optional(),
   }),
 });
 
 export type GrammarCheckReq = z.infer<typeof GrammarCheckSchema>;
 
-export const GrammarConfigSchema = BaseSchema.extend({
-  body: z.object({
-    /** BCP-47 tag of the language to list the rules of */
-    language: z.string().min(2).max(35),
-  }),
+export const GrammarStatusSchema = BaseSchema.extend({
+  body: z.object({}),
 });
 
-export type GrammarConfigReq = z.infer<typeof GrammarConfigSchema>;
+export type GrammarStatusReq = z.infer<typeof GrammarStatusSchema>;

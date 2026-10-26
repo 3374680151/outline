@@ -27,8 +27,8 @@ import {
   PublishIcon,
   CommentIcon,
   CopyIcon,
-  PadlockIcon,
   GlobeIcon,
+  PadlockIcon,
   LogoutIcon,
   CaseSensitiveIcon,
   OrderedListIcon,
@@ -88,6 +88,7 @@ import {
   TrashSection,
 } from "~/actions/sections";
 import { setPersistedState } from "~/hooks/usePersistedState";
+import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
 import {
   documentHistoryPath,
@@ -752,32 +753,6 @@ export const downloadDocumentAsMarkdown = createAction({
   },
 });
 
-export const downloadDocumentAsMarkdownSourceOnly = createAction({
-  name: ({ t, isMenu }) =>
-    isMenu
-      ? t("Markdown (source only)")
-      : t("Download as Markdown (source only)"),
-  analyticsName: "Download document as Markdown (source only)",
-  section: ActiveDocumentSection,
-  shortcut: fileExtensionHint(".md"),
-  keywords: "md markdown export download source original english",
-  icon: <MarkdownIcon />,
-  iconInContextMenu: false,
-  visible: ({ activeDocumentId, stores }) =>
-    !!activeDocumentId && stores.policies.abilities(activeDocumentId).download,
-  perform: async ({ activeDocumentId, stores }) => {
-    if (!activeDocumentId) {
-      return;
-    }
-
-    const document = stores.documents.get(activeDocumentId);
-    await document?.download({
-      contentType: ExportContentType.Markdown,
-      includeTranslations: false,
-    });
-  },
-});
-
 export const downloadDocumentAsHTML = createAction({
   name: ({ t, isMenu }) => (isMenu ? t("HTML") : t("Download as HTML")),
   analyticsName: "Download document as HTML",
@@ -973,6 +948,36 @@ export const duplicateDocument = createAction({
         />
       ),
     });
+  },
+});
+
+export const openBilingualEditor = createAction({
+  name: ({ t }) => t("Bilingual editor"),
+  analyticsName: "Open bilingual editor",
+  section: ActiveDocumentSection,
+  icon: <GlobeIcon />,
+  keywords: "translate chinese bilingual english 中文 翻译",
+  visible: ({ activeDocumentId, stores }) =>
+    !!activeDocumentId && stores.policies.abilities(activeDocumentId).update,
+  perform: async ({ activeDocumentId, t }) => {
+    if (!activeDocumentId) {
+      return;
+    }
+
+    try {
+      await BilingualStore.createPair({ documentId: activeDocumentId });
+    } catch (_err) {
+      // Most likely the document is already part of a pair; continue to
+      // open whatever pair exists below.
+    }
+
+    const info = await BilingualStore.fetchInfo(activeDocumentId);
+
+    if (info.pair) {
+      history.push(`/doc/${info.pair.sourceDocumentId}/bilingual`);
+    } else {
+      toast.message(t("Bilingual editing is unavailable for this document"));
+    }
   },
 });
 
@@ -1208,7 +1213,6 @@ export const exportDocument = createActionWithChildren({
   keywords: "download print pdf markdown html",
   children: [
     downloadDocumentAsMarkdown,
-    downloadDocumentAsMarkdownSourceOnly,
     downloadDocumentAsHTML,
     downloadDocumentAsTextBundle,
     downloadDocumentAsPDF,
@@ -1971,7 +1975,6 @@ export const rootDocumentActions = [
   deleteDocument,
   importDocument,
   downloadDocumentAsMarkdown,
-  downloadDocumentAsMarkdownSourceOnly,
   downloadDocumentAsHTML,
   downloadDocumentAsTextBundle,
   downloadDocumentAsPDF,
@@ -1987,6 +1990,7 @@ export const rootDocumentActions = [
   unsubscribeDocument,
   searchInDocument,
   duplicateDocument,
+  openBilingualEditor,
   leaveDocument,
   moveDocumentToCollection,
   openRandomDocument,
