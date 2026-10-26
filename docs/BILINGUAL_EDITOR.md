@@ -745,3 +745,30 @@ function diffBlocks(oldB: Block[], newB: Block[]): Op[] {
 | 9 | 验收访问 | 开发机无 `local.outline.dev` hosts/证书；验收启动用 `URL=http://localhost:3000` 覆盖（不改动 `.env.development` 既有配置，仅追加新变量） |
 | 10 | i18n | 新组件文案全部 `t("...")`（纯英文 key），提取靠 `yarn build:i18n`，不手动编辑 locale JSON |
 | 11 | 依赖环境 | yarn 4.18（corepack 托管，`corepack yarn <cmd>`）；postgres/redis 容器已运行（`outline-postgres-1`/`outline-redis-1`）；LT 容器已 healthy（8010） |
+
+---
+
+## 17. 实施状态与验收（v1.1 · 已实施）
+
+**分支**：`feat/bilingual-editor`（7 个 commit，`da9c7bcc2..bc6fe2ced`）。**质量门**：`yarn tsc --noEmit` 干净；oxlint 0 error；54 项测试全绿（44 纯函数单测 + 10 服务端 API 测试）；GLM 三轮代码审查（一轮 FAIL 2P0+4P1 → 全部修复；二轮 FAIL 4P1 → 全部修复；三轮 **PASS**）。**浏览器端到端冒烟已通过**：语法下划线/句下圆点/问题卡/一键修复（hellow→Hello）、选区圆点+翻译卡（microsoft-free 免费端点）、双语分屏（结构镜像 + 两段自动翻译写入）、级联删除、防覆盖保护。
+
+### 验收方式
+
+```bash
+PORT=3100 URL=http://localhost:3100 corepack yarn dev:watch   # 后端 :3100，vite :3101
+# 浏览器打开 http://localhost:3100（验证码邮件在 http://localhost:8025 Mailpit）
+```
+
+`.env.development` 追加了：`SECRET_KEY`、`UTILS_SECRET`、`LANGUAGETOOL_URL=http://127.0.0.1:8010`、`TRANSLATION_PROVIDER_ORDER=microsoft-free`、`SMTP_HOST/PORT`（Mailpit）。
+
+### 已知问题（v1 范围内接受，v1.5 处理）
+
+| # | 问题 | 说明 |
+| --- | --- | --- |
+| 1 | MCP 工具与集合删除不经配对级联 | MCP documents 删除、Collection 整体删除（`server/models/Collection.ts:430`）绕过 `bilingualPairDeleter`，会留下 active pair + 孤儿 twin；垃圾箱永久删除时由 FK CASCADE 自愈（GLM 二轮 finding 6） |
+| 2 | 单侧归档未处理 pair | 归档源文档时 twin 保持活跃，仅显示「结构不一致」横幅（可 repair） |
+| 3 | 不可镜像类型（列表/表格/代码块）的 CN 侧为空占位 | 结构镜像 v1 保证顶层索引平行（同类型空节点，fallback paragraph），内容不自动填充，状态 `skipped`（设计 §6.1/§23 的既定范围） |
+| 4 | 中文全文搜索失效 | PostgreSQL 触发器硬编码 `'english'` 配置（§12-20 既有限制，非本模块引入） |
+| 5 | 句下标记为块级聚合 | v1 以段落尾 widget 聚合展示问题点，未按句子精确挂载（§8.4-2 的简化实现） |
+| 6 | 建议面板仅在双语场景 | 普通文档视图的校对结果通过下划线/圆点/问题卡呈现，侧栏面板 v1.5 开放 |
+| 7 | 弹层主题 | 翻译/问题卡弹层使用基础亮/暗主题重建（挂载于 body，不继承自定义工作区主题） |
