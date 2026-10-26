@@ -27,7 +27,7 @@ import {
 import slugify from "slugify";
 import { isEmail } from "validator";
 import { TeamPreferenceDefaults } from "@shared/constants";
-import type { Plan, PlanFeature, TeamPreferences, TeamTranslationSettings } from "@shared/types";
+import type { Plan, PlanFeature, TeamPreferences } from "@shared/types";
 import { TeamPreference, UserRole } from "@shared/types";
 import {
   getBaseDomain,
@@ -55,7 +55,6 @@ import IsUrlOrRelativePath from "./validators/IsUrlOrRelativePath";
 import Length from "./validators/Length";
 import NotContainsUrl from "./validators/NotContainsUrl";
 import { SkipChangeset } from "./decorators/Changeset";
-import Encrypted from "./decorators/Encrypted";
 
 /**
  * Flags that are available for setting on the team.
@@ -241,15 +240,6 @@ class Team extends ParanoidModel<
   @Column(DataType.JSONB)
   preferences: TeamPreferences | null;
 
-  @AllowNull
-  @Column(DataType.JSONB)
-  translationSettings: TeamTranslationSettings | null;
-
-  @AllowNull
-  @Column(DataType.BLOB)
-  @Encrypted
-  translationApiKey: string | null;
-
   @IsDate
   @Column(DataType.DATE)
   suspendedAt: Date | null;
@@ -378,17 +368,6 @@ class Team extends ParanoidModel<
     this.preferences?.[preference] ??
     TeamPreferenceDefaults[preference] ??
     false;
-
-  /**
-   * Returns the complete translation service configuration including the
-   * decrypted API key, or undefined if translation is not fully configured.
-   *
-   * @returns The translation configuration, or undefined when not configured.
-   */
-  public getTranslationConfig = () =>
-    this.translationSettings && this.translationApiKey
-      ? { ...this.translationSettings, apiKey: this.translationApiKey }
-      : undefined;
 
   /**
    * Team flags are for storing information on a team record that is not visible

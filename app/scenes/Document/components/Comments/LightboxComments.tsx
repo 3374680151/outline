@@ -159,7 +159,7 @@ const Wrapper = styled(Flex)`
 const Header = styled.div`
   flex-shrink: 0;
   padding: 20px 16px 16px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: ${s("text")};
   user-select: none;

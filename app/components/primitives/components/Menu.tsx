@@ -19,8 +19,8 @@ const BaseMenuItemCSS = css<BaseMenuItemProps>`
   justify-content: flex-start;
   align-items: center;
   width: 100%;
-  min-height: 36px;
-  font-size: 14px;
+  min-height: 32px;
+  font-size: 16px;
   cursor: var(--pointer);
   user-select: none;
   white-space: nowrap;
@@ -31,8 +31,8 @@ const BaseMenuItemCSS = css<BaseMenuItemProps>`
 
   margin: 0;
   border: 0;
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: 4px;
+  padding: 12px;
 
   ${(props) => props.disabled && "pointer-events: none;"}
 
@@ -49,15 +49,17 @@ const BaseMenuItemCSS = css<BaseMenuItemProps>`
     props.$active &&
     !props.disabled &&
     `
-    color: ${props.theme.text};
-    background: ${props.theme.warmGrey};
-    outline-color: ${props.theme.accent};
+    color: ${props.theme.accentText};
+    background: ${props.$dangerous ? props.theme.danger : props.theme.accent};
+    outline-color: ${
+      props.$dangerous ? props.theme.danger : props.theme.accent
+    };
     box-shadow: none;
     cursor: var(--pointer);
 
     svg:not([data-fixed-color]) {
-      color: ${props.theme.accent};
-      fill: ${props.theme.accent};
+      color: ${props.theme.accentText};
+      fill: ${props.theme.accentText};
     }
   `}
 
@@ -67,8 +69,8 @@ const BaseMenuItemCSS = css<BaseMenuItemProps>`
       &[data-highlighted],
       &[data-state="open"],
       &:focus-visible {
-        color: ${props.theme.text};
-        background: ${props.$dangerous ? props.theme.danger : props.theme.warmGrey};
+        color: ${props.theme.accentText};
+        background: ${props.$dangerous ? props.theme.danger : props.theme.accent};
         outline-color: ${
           props.$dangerous ? props.theme.danger : props.theme.accent
         };
@@ -76,14 +78,15 @@ const BaseMenuItemCSS = css<BaseMenuItemProps>`
         cursor: var(--pointer);
 
         svg:not([data-fixed-color]) {
-          color: ${props.$dangerous ? props.theme.accentText : props.theme.text};
-          fill: ${props.$dangerous ? props.theme.accentText : props.theme.text};
+          color: ${props.theme.accentText};
+          fill: ${props.theme.accentText};
         }
       }
   `}
 
   ${breakpoint("tablet")`
-    padding: 8px 12px;
+    padding: 4px 12px;
+    font-size: 14px;
   `}
 `;
 

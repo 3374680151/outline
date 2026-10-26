@@ -4,7 +4,7 @@ import { AllSelection } from "prosemirror-state";
 import { useRef, useCallback } from "react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Prompt, matchPath, useHistory, useLocation } from "react-router-dom";
+import { Prompt, matchPath, useHistory } from "react-router-dom";
 import { toast } from "sonner";
 import styled from "styled-components";
 import { breakpoint } from "@shared/styles/breakpoint";
@@ -27,10 +27,9 @@ import RegisterKeyDown from "~/components/RegisterKeyDown";
 import type { Editor as TEditor } from "~/editor";
 import type { Properties } from "~/types";
 import useEventListener from "~/hooks/useEventListener";
+import type { SidebarContextType } from "~/components/Sidebar/components/SidebarContext";
 import { useLocationSidebarContext } from "~/hooks/useLocationSidebarContext";
 import useMobile from "~/hooks/useMobile";
-import { HEADER_HEIGHT } from "~/components/Header";
-import AssistantPanel from "./AssistantPanel";
 import useStores from "~/hooks/useStores";
 import isTextInput from "~/utils/isTextInput";
 import Logger from "~/utils/Logger";
@@ -55,6 +54,7 @@ type LocationState = {
   title?: string;
   restore?: boolean;
   revisionId?: string;
+  sidebarContext?: SidebarContextType;
 };
 
 interface Props {
@@ -96,8 +96,7 @@ function DocumentScene({
   const documentContext = useDocumentContext();
   const isMobile = useMobile();
   const { t } = useTranslation();
-  const history = useHistory();
-  const location = useLocation<LocationState>();
+  const history = useHistory<LocationState>();
   const sidebarContext = useLocationSidebarContext();
   const { team, user } = auth;
 
@@ -119,8 +118,8 @@ function DocumentScene({
   } = useDocumentSave({ document, editorRef, readOnly });
 
   const onSynced = useCallback(async () => {
-    const restore = location.state?.restore;
-    const revisionId = location.state?.revisionId;
+    const restore = history.location.state?.restore;
+    const revisionId = history.location.state?.revisionId;
     const editor = editorRef.current;
 
     if (!editor) {
@@ -128,7 +127,7 @@ function DocumentScene({
     }
 
     // Highlight search term when navigating from search results
-    const params = new URLSearchParams(location.search);
+    const params = new URLSearchParams(history.location.search);
     const searchTerm = params.get("q");
     if (searchTerm) {
       editor.commands.find({ text: searchTerm });
@@ -139,7 +138,7 @@ function DocumentScene({
     }
 
     history.replace(document.url, {
-      ...location.state,
+      ...history.location.state,
       restore: undefined,
       revisionId: undefined,
     });
@@ -159,7 +158,7 @@ function DocumentScene({
       );
       toast.success(t("Document restored"));
     }
-  }, [location, replaceSelection, t, history, document.url]);
+  }, [replaceSelection, t, history, document.url]);
 
   const onUndoRedo = useCallback(
     (event: KeyboardEvent) => {
@@ -260,7 +259,7 @@ function DocumentScene({
       }
       ev.preventDefault();
 
-      if (location.pathname.endsWith("history")) {
+      if (history.location.pathname.endsWith("history")) {
         history.push({
           pathname: document.path,
           state: { sidebarContext },
@@ -272,7 +271,7 @@ function DocumentScene({
         });
       }
     },
-    [readOnly, location.pathname, history, document, sidebarContext]
+    [readOnly, history, document, sidebarContext]
   );
 
   const onPublish = useCallback(
@@ -322,13 +321,6 @@ function DocumentScene({
     tocPos &&
     !isMobile &&
     (isShare ? ui.tocVisible !== false : ui.tocVisible === true);
-  // The assistant pane hosts the translation and grammar panels. It is a
-  // writing aid, unavailable on shared or mobile views.
-  const showTranslation =
-    !isShare &&
-    !isMobile &&
-    !revision &&
-    (ui.translationPanelVisible || ui.grammarPanelVisible);
   const tocOffset =
     tocPos === TOCPosition.Left
       ? EditorStyleHelper.tocWidth / -2
@@ -434,99 +426,80 @@ function DocumentScene({
           <Main
             fullWidth={document.fullWidth}
             tocPosition={tocPos}
-            translation={showTranslation}
             style={fullWidthTransformOffsetStyle}
           >
-            <EditorRegion
-              fullWidth={document.fullWidth}
-              tocPosition={tocPos}
-              translation={showTranslation}
-            >
-              <React.Suspense
-                fallback={
-                  <EditorContainer
-                    docFullWidth={document.fullWidth}
-                    showContents={showContents}
-                    tocPosition={tocPos}
-                    translation={showTranslation}
-                  >
-                    <PlaceholderDocument />
-                  </EditorContainer>
-                }
-              >
+            <React.Suspense
+              fallback={
                 <EditorContainer
                   docFullWidth={document.fullWidth}
                   showContents={showContents}
                   tocPosition={tocPos}
-                  translation={showTranslation}
                 >
-                  {revision ? (
-                    <RevisionViewer
-                      ref={editorRef}
-                      document={document}
-                      revision={revision}
-                      id={revision.id}
-                    />
-                  ) : (
-                    <>
-                      <Notices document={document} readOnly={readOnly} />
-
-                      {showContents && (
-                        <PrintContentsContainer>
-                          <Contents />
-                        </PrintContentsContainer>
-                      )}
-                      <Editor
-                        id={document.id}
-                        key={embedsDisabled ? "disabled" : "enabled"}
-                        ref={editorRef}
-                        multiplayer={multiplayerEditor}
-                        isDraft={document.isDraft}
-                        document={document}
-                        value={readOnly ? document.data : undefined}
-                        defaultValue={document.data}
-                        embedsDisabled={embedsDisabled}
-                        onSynced={onSynced}
-                        onFileUploadStart={onFileUploadStart}
-                        onFileUploadStop={onFileUploadStop}
-                        onCreateLink={onCreateLink}
-                        onChangeTitle={handleChangeTitle}
-                        onChangeIcon={handleChangeIcon}
-                        onSave={onSave}
-                        onPublish={onPublish}
-                        onCancel={goBack}
-                        readOnly={readOnly}
-                        canUpdate={abilities.update}
-                        canComment={abilities.comment}
-                        autoFocus={document.isJustCreated}
-                      >
-                        <ReferencesWrapper>
-                          <References document={document} />
-                        </ReferencesWrapper>
-                      </Editor>
-                    </>
-                  )}
+                  <PlaceholderDocument />
                 </EditorContainer>
-                {showContents && (
-                  <ContentsContainer
-                    docFullWidth={document.fullWidth}
-                    position={tocPos}
-                    translation={showTranslation}
-                  >
-                    <Contents />
-                  </ContentsContainer>
+              }
+            >
+              <EditorContainer
+                docFullWidth={document.fullWidth}
+                showContents={showContents}
+                tocPosition={tocPos}
+              >
+                {revision ? (
+                  <RevisionViewer
+                    ref={editorRef}
+                    document={document}
+                    revision={revision}
+                    id={revision.id}
+                  />
+                ) : (
+                  <>
+                    <Notices document={document} readOnly={readOnly} />
+
+                    {showContents && (
+                      <PrintContentsContainer>
+                        <Contents />
+                      </PrintContentsContainer>
+                    )}
+                    <Editor
+                      id={document.id}
+                      key={embedsDisabled ? "disabled" : "enabled"}
+                      ref={editorRef}
+                      multiplayer={multiplayerEditor}
+                      isDraft={document.isDraft}
+                      document={document}
+                      value={readOnly ? document.data : undefined}
+                      defaultValue={document.data}
+                      embedsDisabled={embedsDisabled}
+                      onSynced={onSynced}
+                      onFileUploadStart={onFileUploadStart}
+                      onFileUploadStop={onFileUploadStop}
+                      onCreateLink={onCreateLink}
+                      onChangeTitle={handleChangeTitle}
+                      onChangeIcon={handleChangeIcon}
+                      onSave={onSave}
+                      onPublish={onPublish}
+                      onCancel={goBack}
+                      readOnly={readOnly}
+                      canUpdate={abilities.update}
+                      canComment={abilities.comment}
+                      autoFocus={document.isJustCreated}
+                    >
+                      <ReferencesWrapper>
+                        <References document={document} />
+                      </ReferencesWrapper>
+                    </Editor>
+                  </>
                 )}
-                {showTranslation && (
-                  <TranslationContainer
-                    style={{
-                      width: `${(ui.translationPaneRatio ?? 0.42) * 100}%`,
-                    }}
-                  >
-                    <AssistantPanel />
-                  </TranslationContainer>
-                )}
-              </React.Suspense>
-            </EditorRegion>
+              </EditorContainer>
+              {showContents && (
+                <ContentsContainer
+                  docFullWidth={document.fullWidth}
+                  position={tocPos}
+                >
+                  <Contents />
+                </ContentsContainer>
+              )}
+            </React.Suspense>
           </Main>
           {children}
         </Container>
@@ -538,46 +511,28 @@ function DocumentScene({
 type MainProps = {
   fullWidth: boolean;
   tocPosition: TOCPosition | false;
-  translation: boolean;
 };
 
 const Main = styled.div<MainProps>`
   margin-top: 4px;
 
   ${breakpoint("tablet")`
-    display: ${({ translation }: MainProps) => (translation ? "flex" : "grid")};
-    align-items: ${({ translation }: MainProps) =>
-      translation ? "flex-start" : undefined};
-    overflow: ${({ translation }: MainProps) =>
-      translation ? "hidden" : undefined};
-
-    grid-template-columns: ${({
-      fullWidth,
-      tocPosition,
-      translation,
-    }: MainProps) =>
-      translation
-        ? undefined
-        : fullWidth
-          ? tocPosition === TOCPosition.Left
-            ? `${EditorStyleHelper.tocWidth}px minmax(0, 1fr)`
-            : `minmax(0, 1fr) ${EditorStyleHelper.tocWidth}px`
-          : `1fr minmax(0, ${`calc(46em + ${EditorStyleHelper.documentGutter})`}) 1fr`};
+    display: grid;
+    grid-template-columns: ${({ fullWidth, tocPosition }: MainProps) =>
+      fullWidth
+        ? tocPosition === TOCPosition.Left
+          ? `${EditorStyleHelper.tocWidth}px minmax(0, 1fr)`
+          : `minmax(0, 1fr) ${EditorStyleHelper.tocWidth}px`
+        : `1fr minmax(0, ${`calc(46em + ${EditorStyleHelper.documentGutter})`}) 1fr`};
   `};
 
   ${breakpoint("desktopLarge")`
-    grid-template-columns: ${({
-      fullWidth,
-      tocPosition,
-      translation,
-    }: MainProps) =>
-      translation
-        ? undefined
-        : fullWidth
-          ? tocPosition === TOCPosition.Left
-            ? `${EditorStyleHelper.tocWidth}px minmax(0, 1fr)`
-            : `minmax(0, 1fr) ${EditorStyleHelper.tocWidth}px`
-          : `1fr minmax(0, ${`calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter})`}) 1fr`};
+    grid-template-columns: ${({ fullWidth, tocPosition }: MainProps) =>
+      fullWidth
+        ? tocPosition === TOCPosition.Left
+          ? `${EditorStyleHelper.tocWidth}px minmax(0, 1fr)`
+          : `minmax(0, 1fr) ${EditorStyleHelper.tocWidth}px`
+        : `1fr minmax(0, ${`calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter})`}) 1fr`};
   `};
 
   @media print {
@@ -592,7 +547,6 @@ const Main = styled.div<MainProps>`
 type ContentsContainerProps = {
   docFullWidth: boolean;
   position: TOCPosition | false;
-  translation: boolean;
 };
 
 const ContentsContainer = styled.div<ContentsContainerProps>`
@@ -604,66 +558,6 @@ const ContentsContainer = styled.div<ContentsContainerProps>`
       position === TOCPosition.Left ? 1 : docFullWidth ? 2 : 3};
     justify-self: ${({ position }: ContentsContainerProps) =>
       position === TOCPosition.Left ? "end" : "start"};
-
-    // Inside the split view the table of contents becomes a narrow flex
-    // column beside the editor.
-    ${({ translation, position }: ContentsContainerProps) =>
-      translation
-        ? `flex: none;
-    width: ${EditorStyleHelper.tocWidth}px;
-    align-self: stretch;
-    order: ${position === TOCPosition.Left ? "-1" : "1"};`
-        : ""}
-  `};
-
-  @media print {
-    display: none;
-  }
-`;
-
-type EditorRegionProps = {
-  fullWidth: boolean;
-  tocPosition: TOCPosition | false;
-  translation: boolean;
-};
-
-/**
- * Wraps the editor (and table of contents) columns. Transparent in layout
- * while the translation pane is closed; when it is open the region becomes
- * the split view's left pane, centering the document inside the space left
- * of the translation pane.
- */
-const EditorRegion = styled.div<EditorRegionProps>`
-  ${breakpoint("tablet")`
-    ${({ translation }: EditorRegionProps) =>
-      translation
-        ? `flex: 1;
-    min-width: 0;
-    position: sticky;
-    top: ${HEADER_HEIGHT}px;
-    height: calc(100vh - ${HEADER_HEIGHT}px);
-    overflow-y: auto;
-    overflow-x: hidden;
-    display: flex;
-    align-items: flex-start;`
-        : "display: contents"};
-  `};
-
-  @media print {
-    display: contents;
-  }
-`;
-
-const TranslationContainer = styled.div`
-  ${breakpoint("tablet")`
-    align-self: stretch;
-    height: auto;
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    background: ${s("backgroundSecondary")};
-    border-left: 1px solid ${s("inputBorder")};
-    padding: 12px 0 12px 16px;
   `};
 
   @media print {
@@ -684,7 +578,6 @@ type EditorContainerProps = {
   docFullWidth: boolean;
   showContents: boolean;
   tocPosition: TOCPosition | false;
-  translation: boolean;
 };
 
 const EditorContainer = styled.div<EditorContainerProps>`
@@ -713,26 +606,6 @@ const EditorContainer = styled.div<EditorContainerProps>`
             : 1
           : "1 / -1"
         : 2};
-
-    // Inside the split view the editor keeps the regular layout's column
-    // width, shrinking only when the space left of the translation pane is
-    // narrower, and centers itself in any remaining space.
-    ${({ translation, docFullWidth }: EditorContainerProps) =>
-      translation
-        ? docFullWidth
-          ? "flex: 1 1 auto;"
-          : `flex: 0 1 calc(46em + ${EditorStyleHelper.documentGutter});
-    max-width: calc(46em + ${EditorStyleHelper.documentGutter});
-    margin: 0 auto;`
-        : ""}
-  `};
-
-  ${breakpoint("desktopLarge")`
-    ${({ translation, docFullWidth }: EditorContainerProps) =>
-      translation && !docFullWidth
-        ? `flex-basis: calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter});
-    max-width: calc(${EditorStyleHelper.documentWidth} + ${EditorStyleHelper.documentGutter});`
-        : ""}
   `};
 `;
 

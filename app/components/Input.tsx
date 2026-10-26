@@ -47,9 +47,9 @@ export const NativeInput = styled.input<{
   outline: none;
   background: none;
   color: ${s("text")};
-  height: 32px;
+  height: 30px;
   min-width: 0;
-  font-size: 14px;
+  font-size: 15px;
 
   ${ellipsis()}
   ${undraggableOnDesktop()}
@@ -121,7 +121,7 @@ export const Outline = styled(Flex)<{
       : props.$focused
         ? props.theme.inputBorderFocused
         : props.theme.inputBorder};
-  border-radius: ${(props) => (props.$round ? "16px" : "6px")};
+  border-radius: ${(props) => (props.$round ? "16px" : "4px")};
   font-weight: normal;
 
   ${breakpoint("mobile", "tablet")`

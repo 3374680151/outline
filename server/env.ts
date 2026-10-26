@@ -494,20 +494,6 @@ export class Environment {
   public DROPBOX_APP_KEY = this.toOptionalString(environment.DROPBOX_APP_KEY);
 
   /**
-   * Base URL of a self-hosted LanguageTool server used for grammar checking,
-   * e.g. http://127.0.0.1:8010. Grammar checking is unavailable when unset.
-   */
-  @IsOptional()
-  @IsUrl({
-    protocols: ["http", "https"],
-    require_protocol: true,
-    require_tld: false,
-  })
-  public LANGUAGE_TOOL_URL = this.toOptionalString(
-    environment.LANGUAGE_TOOL_URL
-  )?.replace(/\/$/, "");
-
-  /**
    * Sentry DSN for capturing errors and frontend performance.
    */
   @Public
@@ -926,6 +912,88 @@ export class Environment {
   @IsNumber()
   public POPULARITY_UPDATE_INTERVAL_HOURS =
     this.toOptionalNumber(environment.POPULARITY_UPDATE_INTERVAL_HOURS) ?? 12;
+
+  /**
+   * The URL of the LanguageTool server used for grammar checking, e.g.
+   * http://languagetool:8081. When empty grammar checking is disabled.
+   */
+  @IsOptional()
+  @IsUrl({
+    protocols: ["http", "https"],
+    require_protocol: true,
+    require_tld: false,
+  })
+  public LANGUAGETOOL_URL = this.toOptionalString(environment.LANGUAGETOOL_URL);
+
+  /**
+   * Timeout in milliseconds for requests to the LanguageTool server.
+   */
+  @IsOptional()
+  @IsNumber()
+  public LANGUAGETOOL_TIMEOUT_MS =
+    this.toOptionalNumber(environment.LANGUAGETOOL_TIMEOUT_MS) ?? 8000;
+
+  /**
+   * Comma separated order of translation providers to try, e.g.
+   * "openai-compatible,deepl,microsoft-free". Providers lacking credentials
+   * are skipped at runtime.
+   */
+  public TRANSLATION_PROVIDER_ORDER =
+    environment.TRANSLATION_PROVIDER_ORDER ??
+    "openai-compatible,deepl,microsoft-free";
+
+  /**
+   * Base URL of an OpenAI-compatible chat completion endpoint used by the
+   * "openai-compatible" translation provider.
+   */
+  @IsOptional()
+  @IsUrl({
+    protocols: ["http", "https"],
+    require_protocol: true,
+    require_tld: false,
+  })
+  public OPENAI_BASE_URL = this.toOptionalString(environment.OPENAI_BASE_URL);
+
+  /**
+   * API key for the OpenAI-compatible translation provider.
+   */
+  @IsOptional()
+  public OPENAI_API_KEY = this.toOptionalString(environment.OPENAI_API_KEY);
+
+  /**
+   * Model name used by the OpenAI-compatible translation provider.
+   */
+  public OPENAI_TRANSLATION_MODEL =
+    environment.OPENAI_TRANSLATION_MODEL ?? "gpt-4o-mini";
+
+  /**
+   * API key for the DeepL translation provider. Keys ending in ":fx" are
+   * routed to the DeepL API free host automatically.
+   */
+  @IsOptional()
+  public DEEPL_API_KEY = this.toOptionalString(environment.DEEPL_API_KEY);
+
+  /**
+   * Whether the bilingual editor module is enabled for this installation.
+   * Can additionally be toggled per workspace via team preferences.
+   */
+  @IsOptional()
+  @IsBoolean()
+  public BILINGUAL_EDITOR_ENABLED =
+    environment.BILINGUAL_EDITOR_ENABLED !== undefined
+      ? this.toBoolean(environment.BILINGUAL_EDITOR_ENABLED)
+      : true;
+
+  /**
+   * Whether grammar checking is enabled for this installation. Requires
+   * LANGUAGETOOL_URL to be configured.
+   */
+  @IsOptional()
+  @IsBoolean()
+  public GRAMMAR_CHECKING_ENABLED =
+    environment.GRAMMAR_CHECKING_ENABLED !== undefined
+      ? this.toBoolean(environment.GRAMMAR_CHECKING_ENABLED)
+      : true;
 
   /**
    * Returns true if the current installation is the cloud hosted version at

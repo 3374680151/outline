@@ -758,18 +758,15 @@ export default class Document extends ArchivableModel implements Searchable {
   download = async ({
     contentType,
     includeChildDocuments = this.children.length > 0,
-    includeTranslations = true,
   }: {
     contentType: ExportContentType;
     includeChildDocuments?: boolean;
-    includeTranslations?: boolean;
   }) => {
     const response = await client.post(
       `/documents.export`,
       {
         id: this.id,
         includeChildDocuments,
-        includeTranslations,
       },
       {
         ...(includeChildDocuments ? {} : { download: true }),

@@ -92,7 +92,7 @@ export const SelectButton = styled(Button)<{ $nude?: boolean }>`
 const ItemContainer = styled(Flex)`
   position: relative;
   width: 100%;
-  font-size: 14px;
+  font-size: 16px;
   cursor: var(--pointer);
   color: ${s("textSecondary")};
   background: none;

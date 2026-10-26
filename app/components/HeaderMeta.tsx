@@ -47,7 +47,7 @@ export const metaStyles = css<{ $rtl?: boolean }>`
  * style an existing meta component rather than rendering their own.
  */
 export const headerMetaStyles = css`
-  margin: -12px 0 1.5em 0;
+  margin: -12px 0 2em 0;
   ${textSizeStyles("small")}
   position: relative;
   user-select: none;

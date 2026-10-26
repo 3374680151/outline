@@ -23,4 +23,3 @@ data/*
 !.yarn/releases
 .yarn/releases
 !.yarn/sdks
-.zcode/

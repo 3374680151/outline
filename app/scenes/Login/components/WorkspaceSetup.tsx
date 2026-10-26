@@ -21,55 +21,50 @@ const WorkspaceSetup = ({ onBack }: { onBack?: () => void }) => {
     <Background>
       <BackButton onBack={onBack} />
       <ChangeLanguage locale={detectLanguage()} />
-      <Centered gap={12}>
-        <SetupForm action="/api/installation.create" method="POST">
-          <StyledHeading centered>{t("Create workspace")}</StyledHeading>
-          <Content>
-            {t(
-              "Set up your workspace by providing a name and details for admin login. You can change these later."
-            )}
-          </Content>
-          <Inputs column gap={12}>
-            <Input
-              name="teamName"
-              type="text"
-              label={t("Workspace name")}
-              placeholder="Acme, Inc."
-              required
-              autoFocus
-              flex
-            />
-            <Input
-              name="userName"
-              type="text"
-              label={t("Admin name")}
-              required
-              flex
-            />
-            <Input
-              name="userEmail"
-              type="email"
-              label={t("Admin email")}
-              required
-              flex
-            />
-          </Inputs>
-          <ButtonLarge type="submit" fullwidth>
-            {t("Continue")} →
-          </ButtonLarge>
-        </SetupForm>
+      <Centered
+        as={Form}
+        action="/api/installation.create"
+        method="POST"
+        gap={12}
+      >
+        <StyledHeading centered>{t("Create workspace")}</StyledHeading>
+        <Content>
+          {t(
+            "Set up your workspace by providing a name and details for admin login. You can change these later."
+          )}
+        </Content>
+        <Inputs column gap={12}>
+          <Input
+            name="teamName"
+            type="text"
+            label={t("Workspace name")}
+            placeholder="Acme, Inc."
+            required
+            autoFocus
+            flex
+          />
+          <Input
+            name="userName"
+            type="text"
+            label={t("Admin name")}
+            required
+            flex
+          />
+          <Input
+            name="userEmail"
+            type="email"
+            label={t("Admin email")}
+            required
+            flex
+          />
+        </Inputs>
+        <ButtonLarge type="submit" fullwidth>
+          {t("Continue")} →
+        </ButtonLarge>
       </Centered>
     </Background>
   );
 };
-
-const SetupForm = styled(Form)`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-`;
 
 const Inputs = styled(Flex)`
   width: 100%;

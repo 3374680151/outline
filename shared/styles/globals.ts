@@ -20,7 +20,7 @@ export default createGlobalStyle<Props>`
 
   html {
     --line-height-body: 1.5;
-    --font-size-body: 15px;
+    --font-size-body: 16px;
   }
 
   html,
@@ -98,13 +98,13 @@ export default createGlobalStyle<Props>`
   h4,
   h5,
   h6 {
-    font-weight: 600;
+    font-weight: 500;
     line-height: var(--line-height-h);
     margin-top: 1em;
     margin-bottom: 0.5em;
   }
-  h1 { font-size: 26px; }
-  h2 { font-size: 22px; }
+  h1 { font-size: 36px; }
+  h2 { font-size: 26px; }
   h3 { font-size: 20px; }
   h4 { font-size: 18px; }
   h5 { font-size: 16px; }

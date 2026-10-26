@@ -121,6 +121,15 @@ export async function start(id: number, disconnect: () => void) {
     await Promise.resolve(init(app, server as https.Server, env.SERVICES));
   }
 
+  // Warm the LanguageTool sidecar so the first user request does not pay the
+  // language loading cost. Fire and forget – an unreachable sidecar must not
+  // block startup.
+  if (env.SERVICES.includes("web")) {
+    void import("./utils/LanguageToolClient").then(({ default: client }) =>
+      client.warmup()
+    );
+  }
+
   rejectUnhandledUpgrades(server);
 
   // While the server is stopping, close keep-alive connections once their

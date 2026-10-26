@@ -7,7 +7,6 @@ import DocumentMenuExtension from "~/editor/extensions/DocumentMenu";
 import DragHandle from "~/editor/extensions/DragHandle";
 import EmojiMenuExtension from "~/editor/extensions/EmojiMenu";
 import FindAndReplaceExtension from "~/editor/extensions/FindAndReplace";
-import GrammarCheckExtension from "~/editor/extensions/GrammarCheck";
 import HoverPreviewsExtension from "~/editor/extensions/HoverPreviews";
 import Keys from "~/editor/extensions/Keys";
 import MentionMenuExtension from "~/editor/extensions/MentionMenu";
@@ -28,7 +27,6 @@ export const withUIExtensions = (nodes: Nodes) => [
   MentionMenuExtension,
   DocumentMenuExtension,
   FindAndReplaceExtension,
-  GrammarCheckExtension,
   HoverPreviewsExtension,
   SelectionToolbarExtension,
   CommentGutterExtension,

@@ -278,8 +278,6 @@ export const DocumentsExportSchema = BaseSchema.extend({
   body: BaseIdSchema.extend({
     signedUrls: z.number().optional(),
     includeChildDocuments: z.boolean().prefault(false),
-    /** Whether machine translated blocks are included in the output */
-    includeTranslations: z.boolean().prefault(true),
   }),
 });
 

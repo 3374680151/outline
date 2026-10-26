@@ -36,14 +36,14 @@ const Notice: React.FC<Props> = ({
 const Title = styled.span`
   color: ${s("textSecondary")};
   font-weight: 500;
-  font-size: 14px;
+  font-size: 16px;
 `;
 
 const Container = styled(Text).attrs({ size: "small" })`
   background: ${s("sidebarBackground")};
   color: ${s("textTertiary")};
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 4px;
   position: relative;
   margin: 1em 0;
 

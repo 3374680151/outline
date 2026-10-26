@@ -66,7 +66,7 @@ function DocumentMenu({
   const isMobile = useMobile();
   const can = usePolicy(document);
 
-  const { subscriptions, pins, ui } = useStores();
+  const { subscriptions, pins } = useStores();
   const activeModels = useDocumentActiveModels(document);
 
   const {
@@ -127,33 +127,6 @@ function DocumentMenu({
     [document]
   );
 
-  const handleTranslationPanelToggle = React.useCallback(
-    (checked: boolean) => {
-      // The pane shows one tab at a time, so enabling one panel disables the
-      // other.
-      ui.set(
-        checked
-          ? { translationPanelVisible: true, grammarPanelVisible: false }
-          : { translationPanelVisible: false }
-      );
-    },
-    [ui]
-  );
-
-  const handleGrammarPanelToggle = React.useCallback(
-    (checked: boolean) => {
-      ui.set(
-        checked
-          ? { grammarPanelVisible: true, translationPanelVisible: false }
-          : { grammarPanelVisible: false }
-      );
-    },
-    [ui]
-  );
-
-  const translationPanelVisible = ui.translationPanelVisible;
-  const grammarPanelVisible = ui.grammarPanelVisible;
-
   const rootAction = useDocumentMenuAction({
     documentId: document.id,
     isViewing: showDisplayOptions,
@@ -201,30 +174,6 @@ function DocumentMenu({
               <ToggleMenuItem
                 width={26}
                 height={14}
-                label={t("Translation panel")}
-                labelPosition="left"
-                checked={translationPanelVisible}
-                onChange={handleTranslationPanelToggle}
-              />
-            </Style>
-          )}
-          {showDisplayOptions && !isMobile && (
-            <Style>
-              <ToggleMenuItem
-                width={26}
-                height={14}
-                label={t("Grammar check")}
-                labelPosition="left"
-                checked={grammarPanelVisible}
-                onChange={handleGrammarPanelToggle}
-              />
-            </Style>
-          )}
-          {showDisplayOptions && !isMobile && (
-            <Style>
-              <ToggleMenuItem
-                width={26}
-                height={14}
                 label={t("Full width")}
                 labelPosition="left"
                 checked={document.fullWidth}
@@ -248,10 +197,6 @@ function DocumentMenu({
     handleEmbedsToggle,
     handleFullWidthToggle,
     handleInsightsToggle,
-    handleGrammarPanelToggle,
-    handleTranslationPanelToggle,
-    grammarPanelVisible,
-    translationPanelVisible,
   ]);
 
   return (

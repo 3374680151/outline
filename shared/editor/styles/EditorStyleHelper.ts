@@ -61,9 +61,6 @@ export class EditorStyleHelper {
   /** Container for the comment indicators shown in the gutter beside a line */
   static readonly commentGutter = "comment-gutter";
 
-  /** Machine translated text inserted below its source block */
-  static readonly translation = "translation-marker";
-
   // Multiplayer
 
   /** Remote collaborator's cursor */
@@ -225,10 +222,10 @@ export class EditorStyleHelper {
   static readonly padding = 32;
 
   /** Table of contents width */
-  static readonly tocWidth = 220;
+  static readonly tocWidth = 256;
 
   /** Width of the document content area */
-  static readonly documentWidth = "54.7em";
+  static readonly documentWidth = "52em";
 
   /** Gutter width for the document (for decorations, etc) */
   static readonly documentGutter = "88px";

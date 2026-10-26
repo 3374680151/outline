@@ -214,7 +214,7 @@ const RangeInput = styled.input`
   cursor: var(--pointer);
   color: inherit;
   border-radius: 99999px;
-  background-color: ${s("slateLight")};
+  background-color: #dee1e3;
   appearance: none;
 
   &::-webkit-slider-thumb {

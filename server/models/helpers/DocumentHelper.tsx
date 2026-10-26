@@ -337,11 +337,6 @@ export class DocumentHelper {
       /** The team context */
       teamId?: string;
       /**
-       * Whether machine translated blocks are excluded from the output
-       * (default: false)
-       */
-      excludeTranslations?: boolean;
-      /**
        * Whether the Markdown is leaving Outline, in which case portable
        * CommonMark is written in place of Outline's internal representation
        * (default: false)
@@ -350,16 +345,6 @@ export class DocumentHelper {
     }
   ) {
     let node = DocumentHelper.toProsemirror(document);
-
-    if (options?.excludeTranslations) {
-      const blocks: Node[] = [];
-      node.forEach((child) => {
-        if (!hasTranslationMark(child)) {
-          blocks.push(child);
-        }
-      });
-      node = node.type.create(node.attrs, blocks);
-    }
 
     if (options?.signedUrls && options?.teamId) {
       const data = await ProsemirrorHelper.signAttachmentUrls(
@@ -1522,27 +1507,4 @@ export class DocumentHelper {
 
   /** Comment marks memoized against the document body they were parsed from. */
   private static commentMarksCache = new WeakMap<object, CommentMark[]>();
-}
-
-/**
- * Returns whether any text within the node carries a translation mark, used
- * to exclude machine translated blocks from source-only exports.
- *
- * @param node The node to inspect.
- * @returns True when translated text is present.
- */
-function hasTranslationMark(node: Node): boolean {
-  const markType = node.type.schema.marks.translation;
-  if (!markType) {
-    return false;
-  }
-
-  let found = false;
-  node.descendants((child) => {
-    if (child.marks.some((mark) => mark.type === markType)) {
-      found = true;
-    }
-    return !found;
-  });
-  return found;
 }

@@ -367,15 +367,15 @@ const Wrapper = styled(Flex)<WrapperProps>`
   `};
 
   ${breakpoint("tablet")`
-    padding: 9px 16px;
-    padding-inline-end: ${endPadding(16)};
+    padding: 12px;
+    padding-inline-end: ${endPadding(12)};
     ${(props: WrapperProps) => props.$insetTitleAdjust && `padding-left: 64px;`}
     `};
 `;
 
 const Title = styled("div")`
   display: none;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

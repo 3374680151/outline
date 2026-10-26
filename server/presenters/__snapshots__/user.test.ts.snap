@@ -3,7 +3,7 @@
 exports[`presents a user 1`] = `
 {
   "avatarUrl": null,
-  "color": "#F54A45",
+  "color": "#FF5C80",
   "createdAt": undefined,
   "deletedAt": undefined,
   "id": "123",
@@ -19,7 +19,7 @@ exports[`presents a user 1`] = `
 exports[`presents a user without slack data 1`] = `
 {
   "avatarUrl": null,
-  "color": "#F54A45",
+  "color": "#FF5C80",
   "createdAt": undefined,
   "deletedAt": undefined,
   "id": "123",

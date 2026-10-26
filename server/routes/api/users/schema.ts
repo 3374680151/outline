@@ -129,21 +129,6 @@ export const UsersUpdateSchema = BaseSchema.extend({
         [UserPreference.ShowDocumentStats]: z.boolean(),
         [UserPreference.NotificationBadge]: z.enum(NotificationBadgeType),
         [UserPreference.SidebarSectionOrder]: z.array(z.enum(SidebarSection)),
-        [UserPreference.TranslationSourceLanguage]: z.string().min(2).max(35),
-        [UserPreference.TranslationTargetLanguage]: z.string().min(2).max(35),
-        [UserPreference.GrammarLanguage]: z.string().min(2).max(35),
-        [UserPreference.GrammarMotherTongue]: z.string().min(2).max(35),
-        [UserPreference.GrammarPickyLevel]: z.boolean(),
-        [UserPreference.GrammarAutoCheck]: z.boolean(),
-        [UserPreference.GrammarDisabledCategories]: z
-          .array(z.string().min(1).max(100))
-          .max(100),
-        [UserPreference.GrammarDisabledRules]: z
-          .array(z.string().min(1).max(200))
-          .max(1000),
-        [UserPreference.GrammarDictionary]: z
-          .array(z.string().min(1).max(200))
-          .max(10000),
       })
       .partial()
       .optional(),

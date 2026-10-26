@@ -36,10 +36,13 @@ const uploadFrame = `.${EditorStyleHelper.imageWrapper}, .${EditorStyleHelper.vi
 
 /** The content of a file in the editor, without its frame or hidden controls. */
 const uploadContent = [
-  `.${EditorStyleHelper.imageWrapper} > :is(a, img, .${EditorStyleHelper.imageHandle})`,
+  `.${EditorStyleHelper.imageWrapper} > a`,
+  `.${EditorStyleHelper.imageWrapper} > img`,
+  `.${EditorStyleHelper.imageWrapper} > .${EditorStyleHelper.imageHandle}`,
   `.${EditorStyleHelper.videoWrapper} > video`,
   ".widget > *",
-  `.${EditorStyleHelper.pdfWrapper} > :is(:first-child, embed)`,
+  `.${EditorStyleHelper.pdfWrapper} > :first-child`,
+  `.${EditorStyleHelper.pdfWrapper} > embed`,
 ].join(", ");
 
 export const pulse = (color: string) => keyframes`
@@ -444,26 +447,26 @@ const diffStyle = (props: Props) => css`
   .${EditorStyleHelper.diffModification}:not([class^="component-"]),
   .${EditorStyleHelper.diffModification} > * {
     color: ${props.theme.text};
-    background-color: ${transparentize(0.7, props.theme.warning)};
+    background-color: ${transparentize(0.7, "#FFA500")};
     text-decoration: none;
 
     &.${EditorStyleHelper.diffCurrentChange} {
-      outline-color: ${lighten(0.1, props.theme.warning)};
-      background-color: ${transparentize(0.5, props.theme.warning)};
-      animation: ${pulse(transparentize(0.5, props.theme.warning))} 150ms 1;
+      outline-color: ${lighten(0.1, "#FFA500")};
+      background-color: ${transparentize(0.5, "#FFA500")};
+      animation: ${pulse(transparentize(0.5, "#FFA500"))} 150ms 1;
     }
   }
 
   .${EditorStyleHelper.diffNodeModification} {
-    background-color: ${transparentize(0.7, props.theme.warning)};
+    background-color: ${transparentize(0.7, "#FFA500")};
 
     &[class*="component-"] {
-      outline: 4px solid ${transparentize(0.5, props.theme.warning)};
+      outline: 4px solid ${transparentize(0.5, "#FFA500")};
     }
 
     td,
     th {
-      border-color: ${transparentize(0.5, props.theme.warning)};
+      border-color: ${transparentize(0.5, "#FFA500")};
     }
   }
 
@@ -476,7 +479,7 @@ const diffStyle = (props: Props) => css`
 
   td.${EditorStyleHelper.diffNodeModification},
   th.${EditorStyleHelper.diffNodeModification} {
-    border-color: ${transparentize(0.5, props.theme.warning)};
+    border-color: ${transparentize(0.5, "#FFA500")};
   }
 `;
 
@@ -500,29 +503,6 @@ const findAndReplaceStyle = (props: Props) => css`
     background: rgba(255, 213, 0, 0.75);
     animation: ${pulse("rgba(255, 213, 0, 0.75)")} 150ms 1;
     color: ${props.theme.textHighlightForeground};
-  }
-`;
-
-const grammarCheckStyle = (props: Props) => css`
-  .grammar-issue {
-    text-decoration-line: underline;
-    text-decoration-style: wavy;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 3px;
-    text-decoration-skip-ink: none;
-    cursor: pointer;
-  }
-
-  .grammar-issue.grammar-danger {
-    text-decoration-color: ${props.theme.danger};
-  }
-
-  .grammar-issue.grammar-success {
-    text-decoration-color: ${props.theme.success};
-  }
-
-  .grammar-issue.grammar-accent {
-    text-decoration-color: ${props.theme.accent};
   }
 `;
 
@@ -769,11 +749,10 @@ const noticeStyle = () => css`
 
 const style = (props: Props) => css`
 --font-size-p: var(--font-size-body);
---line-height-p: 1.7;
---font-size-h1: 26px;
+--font-size-h1: 28px;
 --font-size-h2: 22px;
---font-size-h3: 20px;
---font-size-h4: 18px;
+--font-size-h3: 18px;
+--font-size-h4: 16px;
 --font-size-h5: 15px;
 --font-size-h6: 15px;
 
@@ -1096,12 +1075,12 @@ th .image .${EditorStyleHelper.imageWrapper} img {
   user-select: none;
 
   /* The content of the file is faded but not its frame, so that the progress bar on the frame is not faded */
-  :is(${uploadContent}) {
+  ${uploadContent} {
     opacity: 0.5;
   }
 
   /* Progress of the upload along the bottom of the file, after a delay so that quick uploads do not show it */
-  :is(${uploadFrame}) {
+  ${uploadFrame} {
     position: relative;
 
     &::after {
@@ -1124,9 +1103,11 @@ th .image .${EditorStyleHelper.imageWrapper} img {
   animation: ${uploadScaleIn} 150ms ease-out;
 }
 
-.${EditorStyleHelper.uploadComplete} :is(${uploadContent}) {
-  /* Starts halfway through, from the opacity of the placeholder */
-  animation: ${fadeIn} 500ms linear -250ms;
+.${EditorStyleHelper.uploadComplete} {
+  ${uploadContent} {
+    /* Starts halfway through, from the opacity of the placeholder */
+    animation: ${fadeIn} 500ms linear -250ms;
+  }
 }
 
 .${EditorStyleHelper.uploadStatus} {
@@ -1228,8 +1209,9 @@ th .image .${EditorStyleHelper.imageWrapper} img {
   caret-color: transparent;
 }
 
-/* Text blocks selected with the drag handle do not get an outline. */
-.ProseMirror-selectednode:not(p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, hr) {
+/* Text blocks selected with the drag handle do not get an outline. Chained
+   :not() as the email CSS inliner does not support selector lists in :not(). */
+.ProseMirror-selectednode:not(p):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(ul):not(ol):not(li):not(blockquote):not(hr) {
   outline: 2px solid ${props.readOnly ? "transparent" : props.theme.selected};
 
   @media print {
@@ -1549,10 +1531,6 @@ ${
   border: none !important;
 }
 `
-}
-
-.${EditorStyleHelper.translation} {
-  color: ${props.theme.textSecondary};
 }
 
 .${EditorStyleHelper.notice} {
@@ -1997,11 +1975,10 @@ mark {
 .${EditorStyleHelper.codeBlock} {
   position: relative;
   font-size: 90%;
+  border-radius: ${EditorStyleHelper.blockRadius};
 
-  &:hover + .${EditorStyleHelper.codeBlockToggle},
-  &:focus-within + .${EditorStyleHelper.codeBlockToggle},
-  & + .${EditorStyleHelper.codeBlockToggle}:hover,
-  & + .${EditorStyleHelper.codeBlockToggle}:focus {
+  &:hover .${EditorStyleHelper.codeBlockToggle} button,
+  &:focus-within .${EditorStyleHelper.codeBlockToggle} button {
     opacity: 1;
   }
 }
@@ -2158,14 +2135,30 @@ mark {
   }
 }
 
+// Covers the block so the button can stick to the bottom of the viewport
+// while the block is in view.
 .${EditorStyleHelper.codeBlockToggle} {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+
+  @media print {
+    display: none !important;
+  }
+}
+
+.${EditorStyleHelper.codeBlockToggle} button {
   display: inline-flex;
   align-items: center;
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  transform: translate3d(-50%, -50px, 0);
-  margin: 0;
+  position: sticky;
+  bottom: 16px;
+  margin: 0 0 16px;
   padding: 0 8px;
   border: 0;
   border-radius: 100px;
@@ -2184,10 +2177,6 @@ mark {
 
   &:hover {
     background: ${props.theme.backgroundSecondary};
-  }
-
-  @media print {
-    display: none !important;
   }
 }
 
@@ -3056,7 +3045,6 @@ const EditorContainer = styled.div<Omit<Props, "theme">>`
   ${codeBlockStyle}
   ${diffStyle}
   ${findAndReplaceStyle}
-  ${grammarCheckStyle}
   ${emailStyle}
   ${textStyle}
 `;

@@ -427,8 +427,6 @@ export const Bubble = styled(Flex)<{
   font-size: 16px;
   color: ${s("text")};
   background: ${s("backgroundSecondary")};
-  border: 1px solid ${s("inputBorder")};
-  box-shadow: ${s("commentShadow")};
   min-width: 2em;
   margin-bottom: 1px;
   padding: 8px 12px;
@@ -456,7 +454,7 @@ export const Bubble = styled(Flex)<{
   }
 
   ${breakpoint("tablet")`
-    font-size: 14px;
+    font-size: 15px;
   `}
 `;
 

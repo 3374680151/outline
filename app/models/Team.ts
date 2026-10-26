@@ -5,7 +5,6 @@ import type {
   Plan,
   PlanFeature,
   TeamPreferences,
-  TeamTranslationSettings,
   UserRole,
 } from "@shared/types";
 import { stringToColor } from "@shared/utils/color";
@@ -83,10 +82,6 @@ class Team extends Model {
   @Field
   @observable
   preferences: TeamPreferences | null;
-
-  @Field
-  @observable
-  translation: (TeamTranslationSettings & { configured: boolean }) | undefined;
 
   @observable
   domain: string | null | undefined = undefined;
