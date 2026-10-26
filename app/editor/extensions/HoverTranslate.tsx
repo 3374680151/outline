@@ -1,8 +1,6 @@
 import { action, observable } from "mobx";
-import { observer } from "mobx-react";
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import Extension from "@shared/editor/lib/Extension";
 import { s } from "@shared/styles";
@@ -10,7 +8,11 @@ import depths from "@shared/styles/depths";
 import TranslatePopover, {
   type TranslatePopoverProps,
 } from "~/editor/components/TranslatePopover";
-import { mountReactOverlay, VIEWPORT_INSET } from "~/utils/bilingual/overlay";
+import {
+  mountReactOverlay,
+  type ReactOverlay,
+  VIEWPORT_INSET,
+} from "~/utils/bilingual/overlay";
 import { wordAtOffset } from "~/utils/bilingual/wordNormalize";
 
 /**
@@ -44,6 +46,10 @@ const HOVER_HIDE_DELAY_MS = 300;
  * Floating translate affordance ported from the FluentRead selection
  * translator: a small dot appears next to the selection (or the hovered
  * word) and opens a translation popover on click.
+ *
+ * The dot renders through an extension-owned body overlay rather than the
+ * editor widget system, so its visibility never depends on React render
+ * timing inside the editor.
  */
 export default class HoverTranslateExtension extends Extension<HoverTranslateOptions> {
   /** The floating dot state, or null when hidden. */
@@ -59,7 +65,8 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
 
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   private selectionTimer: ReturnType<typeof setTimeout> | null = null;
-  private popoverOverlay: ReturnType<typeof mountReactOverlay> | null = null;
+  private dotOverlay: ReactOverlay | null = null;
+  private popoverOverlay: ReactOverlay | null = null;
   private rafHandle = 0;
   private lastMouseEvent: MouseEvent | null = null;
 
@@ -134,6 +141,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
             },
             destroy: () => {
               editorView.dom.removeEventListener("scroll", handleScroll);
+              this.removeDot();
               this.closePopover();
 
               if (this.hoverTimer) {
@@ -179,6 +187,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       blockIndex: selection.$from.index(0),
       isWord: false,
     };
+    this.renderDot();
   });
 
   /**
@@ -241,6 +250,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
           blockIndex: $pos.index(0),
           isWord: true,
         };
+        this.renderDot();
       }),
       HOVER_DELAY_MS
     );
@@ -268,7 +278,45 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
    */
   hideDot = action(() => {
     this.dot = null;
+    this.removeDot();
   });
+
+  /**
+   * Renders (or re-renders) the floating dot overlay.
+   */
+  private renderDot() {
+    const dot = this.dot;
+
+    if (!dot || !this.editor) {
+      return;
+    }
+
+    this.removeDot();
+
+    const documentId = this.editor.props.id as string;
+    const { left, top } = clampDot(dot.left, dot.top);
+    this.dotOverlay = mountReactOverlay(depths.popover);
+    this.dotOverlay.render(
+      <DotButton
+        $left={left}
+        $top={top}
+        aria-label="Translate"
+        onClick={() => this.openPopover(documentId)}
+      >
+        <DotVisual />
+      </DotButton>
+    );
+  }
+
+  /**
+   * Removes the floating dot overlay.
+   */
+  private removeDot() {
+    if (this.dotOverlay) {
+      this.dotOverlay.destroy();
+      this.dotOverlay = null;
+    }
+  }
 
   /**
    * Opens the translation popover for the current dot.
@@ -282,7 +330,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       return;
     }
 
-    this.hideDot();
+    this.removeDot();
     this.closePopover();
 
     const props: TranslatePopoverProps = {
@@ -308,60 +356,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       this.popoverOverlay = null;
     }
   });
-
-  // The widget must always render an element: ExtensionManager collects
-  // widgets once at editor init, and the observer component below re-renders
-  // itself whenever the observable dot state changes.
-  widget = () => {
-    if (this.options.mode === "off") {
-      return undefined;
-    }
-
-    return <TranslateDot extension={this} />;
-  };
 }
-
-/**
- * The floating dot button, rendered inside the editor's React tree so the
- * theme context and i18n are available. Positioned fixed relative to the
- * viewport with a generous touch hit area around the small visual dot.
- */
-const TranslateDot = observer(function TranslateDot({
-  extension,
-}: {
-  extension: HoverTranslateExtension;
-}) {
-  const { t } = useTranslation();
-  const dot = extension.dot;
-
-  if (!dot) {
-    return null;
-  }
-
-  const left = Math.min(
-    Math.max(VIEWPORT_INSET, dot.left),
-    window.innerWidth - VIEWPORT_INSET - HIT_AREA
-  );
-  const top = Math.min(
-    Math.max(VIEWPORT_INSET, dot.top),
-    window.innerHeight - VIEWPORT_INSET - HIT_AREA
-  );
-
-  return (
-    <DotButton
-      $left={left}
-      $top={top}
-      aria-label={t("Translate")}
-      onClick={() => {
-        if (extension.editor) {
-          extension.openPopover(extension.editor.props.id as string);
-        }
-      }}
-    >
-      <DotVisual />
-    </DotButton>
-  );
-});
 
 /** Visual size of the dot itself, in pixels. */
 const DOT_SIZE = 8;
@@ -369,6 +364,30 @@ const DOT_SIZE = 8;
 /** Size of the clickable/touchable area around the dot, in pixels. */
 const HIT_AREA = 28;
 
+/**
+ * Clamps a dot position into the viewport.
+ *
+ * @param left The unclamped left position.
+ * @param top The unclamped top position.
+ * @returns The clamped position for the hit area's top-left corner.
+ */
+function clampDot(left: number, top: number) {
+  return {
+    left: Math.min(
+      Math.max(VIEWPORT_INSET, left),
+      window.innerWidth - VIEWPORT_INSET - HIT_AREA
+    ),
+    top: Math.min(
+      Math.max(VIEWPORT_INSET, top),
+      window.innerHeight - VIEWPORT_INSET - HIT_AREA
+    ),
+  };
+}
+
+/**
+ * The floating dot button: a small visual dot inside a generous touch hit
+ * area, positioned fixed relative to the viewport.
+ */
 const DotButton = styled.button<{ $left: number; $top: number }>`
   position: fixed;
   left: ${(props) => props.$left}px;
@@ -392,4 +411,3 @@ const DotVisual = styled.span`
   border: 1px solid rgba(255, 255, 255, 0.8);
   background: ${s("accent")};
 `;
-

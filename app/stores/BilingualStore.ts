@@ -55,9 +55,7 @@ class BilingualStore {
       return cached;
     }
 
-    const res = await client.post("/bilingual.info", {
-      body: { documentId },
-    });
+    const res = await client.post("/bilingual.info", { documentId });
     const info: PairInfo = {
       pair: res.data.pair,
       sourceDocumentId: res.data.source?.id,
@@ -87,7 +85,7 @@ class BilingualStore {
     this.isCreating = true;
 
     try {
-      const res = await client.post("/bilingual.create", { body: params });
+      const res = await client.post("/bilingual.create", params);
       const pair = res.data.pair as BilingualPairDTO;
       runInAction(() => {
         this.infoByDocument.set(pair.sourceDocumentId, {
@@ -121,7 +119,7 @@ class BilingualStore {
       sourceCollectionId: string | null;
     })[]
   > => {
-    const res = await client.post("/bilingual.list", { body: {} });
+    const res = await client.post("/bilingual.list", {});
     return res.data.pairs;
   };
 
@@ -135,15 +133,13 @@ class BilingualStore {
   updateState = action(async (pairId: string, blockStates: BilingualBlockState[]) => {
     try {
       const res = await client.post("/bilingual.updateState", {
-        body: {
-          pairId,
-          blockStates: blockStates.map((state) => ({
-            status: state.status,
-            sourceHash: state.sourceHash,
-            autoText: state.autoText,
-            ...(state.error ? { error: state.error } : {}),
-          })),
-        },
+        pairId,
+        blockStates: blockStates.map((state) => ({
+          status: state.status,
+          sourceHash: state.sourceHash,
+          autoText: state.autoText,
+          ...(state.error ? { error: state.error } : {}),
+        })),
       });
       const pair = res.data.pair as BilingualPairDTO;
       runInAction(() => {
@@ -167,9 +163,7 @@ class BilingualStore {
    * @returns The updated pair.
    */
   realign = async (pairId: string): Promise<BilingualPairDTO> => {
-    const res = await client.post("/bilingual.realign", {
-      body: { pairId },
-    });
+    const res = await client.post("/bilingual.realign", { pairId });
     return res.data.pair as BilingualPairDTO;
   };
 
@@ -187,7 +181,9 @@ class BilingualStore {
     provider?: string
   ): Promise<string[]> => {
     const res = await client.post("/translations.translate", {
-      body: { texts, to, ...(provider ? { provider } : {}) },
+      texts,
+      to,
+      ...(provider ? { provider } : {}),
     });
     return res.data.results as string[];
   };
@@ -202,7 +198,7 @@ class BilingualStore {
       return this.providers;
     }
 
-    const res = await client.post("/translations.providers", { body: {} });
+    const res = await client.post("/translations.providers", {});
     runInAction(() => {
       this.providers = res.data.providers;
     });
@@ -226,7 +222,7 @@ class BilingualStore {
     reason?: string;
     matches?: unknown[];
   }> => {
-    const res = await client.post("/grammar.check", { body: params });
+    const res = await client.post("/grammar.check", params);
     return res.data;
   };
 

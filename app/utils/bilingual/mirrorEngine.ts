@@ -10,6 +10,7 @@ import type { BlockSignature } from "./blockDiff";
 import {
   blockText,
   isTextReplaceable,
+  MIRROR_WRITE_META,
   replaceBlockText,
   selectionIntersectsBlock,
   viewBlockSignatures,
@@ -69,6 +70,7 @@ export class MirrorEngine {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private translateQueue = new Set<number>();
   private pairId: string | null = null;
+  private syncProbeTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   /**
@@ -79,6 +81,7 @@ export class MirrorEngine {
    */
   setup(pairId: string, blockStates: BilingualBlockState[]) {
     this.pairId = pairId;
+    this.destroyed = false;
     this.blockStates = blockStates.map((state) => state ?? emptyState());
   }
 
@@ -88,11 +91,61 @@ export class MirrorEngine {
    * @param view The ProseMirror view of the source document.
    */
   registerSource(view: EditorView) {
+    // A view re-registering (editor remount) re-arms the engine: the destroy
+    // of a previous editor generation must not permanently kill it.
+    this.destroyed = false;
     this.sourceView = view;
     this.lastSignatures = viewBlockSignatures(view);
     this.lastTextHashes = viewBlockTextHashes(view, textHash);
     this.alignBlockStatesLength();
+    // Queue pre-existing content for its first translation (enabling
+    // bilingual mode on a document that already has text).
+    view.state.doc.forEach((node, _offset, index) => {
+      if (node.textContent.trim().length > 0 && isTextReplaceable(node)) {
+        this.translateQueue.add(index);
+      }
+    });
+
+    if (this.translateQueue.size > 0) {
+      this.scheduleTranslate();
+    }
+
     this.scheduleConsistencyCheck();
+    this.startSyncProbe();
+  }
+
+  /**
+   * Polls briefly for content that reaches the editor through Yjs sync
+   * without observable transactions (initial restore), which would otherwise
+   * never run through the remote transaction path.
+   */
+  private startSyncProbe() {
+    if (this.syncProbeTimer) {
+      clearTimeout(this.syncProbeTimer);
+    }
+
+    let probes = 0;
+    const probe = () => {
+      if (this.destroyed || !this.sourceView) {
+        return;
+      }
+
+      const signatures = JSON.stringify(viewBlockSignatures(this.sourceView));
+
+      if (signatures !== JSON.stringify(this.lastSignatures)) {
+        this.handleRemoteTransactions();
+      }
+
+      probes++;
+
+      if (probes < 15) {
+        this.syncProbeTimer = setTimeout(probe, 1000);
+      } else {
+        this.syncProbeTimer = null;
+      }
+    };
+
+    this.syncProbeTimer = setTimeout(probe, 1000);
   }
 
   /**
@@ -126,6 +179,11 @@ export class MirrorEngine {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
     }
+
+    if (this.syncProbeTimer) {
+      clearTimeout(this.syncProbeTimer);
+      this.syncProbeTimer = null;
+    }
   }
 
   /**
@@ -149,9 +207,11 @@ export class MirrorEngine {
   };
 
   /**
-   * Handles remote (other users) transactions: only re-reads signatures so
-   * the engine stays in sync without mirroring, since the originating client
-   * mirrors its own operations.
+   * Handles remote (other users) transactions: re-reads signatures so the
+   * engine stays in sync without mirroring (the originating client mirrors
+   * its own operations), and queues content that arrived before this engine
+   * could translate it – most importantly the initial document content,
+   * which reaches the editor as remote transactions during Yjs sync.
    */
   handleRemoteTransactions = () => {
     if (this.destroyed || !this.sourceView) {
@@ -161,7 +221,75 @@ export class MirrorEngine {
     this.lastSignatures = viewBlockSignatures(this.sourceView);
     this.lastTextHashes = viewBlockTextHashes(this.sourceView, textHash);
     this.alignBlockStatesLength();
+    this.ensureTargetStructure();
+    this.queueUntranslatedBlocks();
   };
+
+  /**
+   * Aligns the target document's top-level structure with the source when
+   * the mirror has no content of its own yet. This covers the initial load:
+   * the source content arrives through Yjs sync as remote transactions and
+   * no client mirrors structure for it.
+   */
+  private ensureTargetStructure() {
+    const sourceView = this.sourceView;
+    const targetView = this.targetView;
+
+    if (!sourceView || !targetView) {
+      return;
+    }
+
+    const sourceSigs = viewBlockSignatures(sourceView);
+    const targetSigs = viewBlockSignatures(targetView);
+
+    if (JSON.stringify(sourceSigs) === JSON.stringify(targetSigs)) {
+      return;
+    }
+
+    // Only auto-align an untouched mirror; a mirror with human content goes
+    // through the explicit repair flow instead.
+    if (targetView.state.doc.textContent.trim().length > 0) {
+      this.checkConsistency();
+      return;
+    }
+
+    const ops = diffTopLevelBlocks(targetSigs, sourceSigs);
+
+    for (const op of ops) {
+      this.applyStructureOp(targetView, op);
+    }
+
+    this.blockStates = applyBlockOps(this.blockStates, ops, () => emptyState());
+    this.checkConsistency();
+  }
+
+  /**
+   * Queues every block that has text but has never been translated.
+   */
+  private queueUntranslatedBlocks() {
+    const sourceView = this.sourceView;
+
+    if (!sourceView) {
+      return;
+    }
+
+    sourceView.state.doc.forEach((node, _offset, index) => {
+      const state = this.blockStates[index] ?? emptyState();
+
+      if (
+        node.textContent.trim().length > 0 &&
+        isTextReplaceable(node) &&
+        state.status === "empty" &&
+        !state.sourceHash
+      ) {
+        this.translateQueue.add(index);
+      }
+    });
+
+    if (this.translateQueue.size > 0) {
+      this.scheduleTranslate();
+    }
+  }
 
   /**
    * Diffs the current source structure against the last known one and
@@ -224,9 +352,12 @@ export class MirrorEngine {
         from += doc.child(i).nodeSize;
       }
 
-      view.dispatch(
-        view.state.tr.delete(from, from + doc.child(op.index).nodeSize)
+      const removeTr = view.state.tr.delete(
+        from,
+        from + doc.child(op.index).nodeSize
       );
+      removeTr.setMeta(MIRROR_WRITE_META, true);
+      view.dispatch(removeTr);
       return;
     }
 
@@ -255,7 +386,9 @@ export class MirrorEngine {
             return pos;
           })();
 
-    view.dispatch(view.state.tr.insert(position, node));
+    const insertTr = view.state.tr.insert(position, node);
+    insertTr.setMeta(MIRROR_WRITE_META, true);
+    view.dispatch(insertTr);
   }
 
   /**
@@ -422,7 +555,10 @@ export class MirrorEngine {
       return;
     }
 
-    if (selectionIntersectsBlock(targetView, index)) {
+    // Only back off when the user is actually focused inside the target
+    // block: ProseMirror's resting selection sits inside the first block
+    // even when the pane has never been touched.
+    if (targetView.hasFocus() && selectionIntersectsBlock(targetView, index)) {
       if (!this.forced.has(index)) {
         setTimeout(() => {
           if (!this.destroyed) {

@@ -281,7 +281,9 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     } catch (err) {
       // Network failure: drop this round quietly; the next edit re-queues
       // the blocks and the server-side breaker protects the sidecar.
-      Logger.warn("grammar check failed", { err });
+      Logger.warn("grammar check failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
       return;
     }
 

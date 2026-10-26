@@ -4,41 +4,45 @@ import type { TranslationProvider, TranslationRequest, TranslationResult } from 
 
 /**
  * Free fallback provider using the Microsoft Edge web translator endpoint,
- * the same upstream the FluentRead project uses for its keyless "microsoft"
- * service (see FluentRead/src/providers/translation/microsoft). It requires
+ * ported from the FluentRead project's HTTP protocol (see
+ * FluentRead/src/providers/translation/microsoftTransport.ts). It requires
  * no credentials but is unofficial: failures surface through the provider
  * fallback chain rather than breaking the endpoint.
  */
 
-const AUTH_URL = "https://edge.microsoft.com/translate/auth";
-const TRANSLATE_URL =
-  "https://api-edge.cognitive.microsofttranslator.com/translate";
+const MICROSOFT_TRANSLATE_URL = "https://edge.microsoft.com/translate/translatetext";
 
-let cachedToken: string | null = null;
-let cachedTokenAt = 0;
+type MicrosoftTranslation = { translations?: { text?: string }[] };
 
 /**
- * Fetches (and caches for 9 minutes) the anonymous Edge translator token.
+ * Escapes markup characters before sending: the Edge endpoint always runs
+ * an HTML tag aligner over the input.
  *
- * @returns The bearer token.
- * @throws Error when the token endpoint fails.
+ * @param text The plain text to escape.
+ * @returns The escaped text.
  */
-async function getToken(): Promise<string> {
-  const now = Date.now();
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-  if (cachedToken && now - cachedTokenAt < 9 * 60 * 1000) {
-    return cachedToken;
-  }
-
-  const response = await fetch(AUTH_URL, { timeout: 10000 });
-
-  if (!response.ok) {
-    throw new Error(`microsoft-free auth responded ${response.status}`);
-  }
-
-  cachedToken = await response.text();
-  cachedTokenAt = now;
-  return cachedToken;
+/**
+ * Reverses the escaping applied by escapeHtmlText.
+ *
+ * @param text The escaped text returned by the endpoint.
+ * @returns The decoded plain text.
+ */
+function decodeHtmlText(text: string): string {
+  return text
+    .replace(/&#(?:0*39);|&#x0*27;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&gt;/gi, ">")
+    .replace(/&lt;/gi, "<")
+    .replace(/&amp;/gi, "&");
 }
 
 const microsoftFree: TranslationProvider = {
@@ -51,44 +55,36 @@ const microsoftFree: TranslationProvider = {
   },
 
   async translate(req: TranslationRequest): Promise<TranslationResult> {
-    const token = await getToken();
-    const params = new URLSearchParams({
-      to: req.to,
-      "api-version": "3.0",
-      includeSentenceLength: "false",
-    });
+    const url = new URL(MICROSOFT_TRANSLATE_URL);
+    url.searchParams.set("from", req.from && req.from !== "auto" ? req.from : "");
+    url.searchParams.set("to", req.to);
+    url.searchParams.set("isEnterpriseClient", "false");
 
-    if (req.from && req.from !== "auto") {
-      params.set("from", req.from);
-    }
-
-    const response = await fetch(`${TRANSLATE_URL}?${params.toString()}`, {
+    const response = await fetch(url.toString(), {
       method: "POST",
       timeout: 20000,
       signal: req.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(req.texts.map((text) => ({ Text: text }))),
+      body: JSON.stringify(req.texts.map(escapeHtmlText)),
     });
 
     if (!response.ok) {
-      // The anonymous token may have been rejected – drop it so the next
-      // attempt fetches a fresh one.
-      cachedToken = null;
       Logger.warn(`microsoft-free responded ${response.status}`);
       throw new Error(`microsoft-free responded ${response.status}`);
     }
 
-    const data = (await response.json()) as {
-      detectedLanguage?: { language?: string };
-      translations: { text: string }[];
-    }[];
+    const data = (await response.json()) as MicrosoftTranslation[];
+
+    if (!Array.isArray(data) || data.length !== req.texts.length) {
+      throw new Error("microsoft-free returned an unexpected payload");
+    }
 
     return {
-      results: data.map((entry) => entry.translations[0]?.text ?? ""),
-      detectedFrom: data[0]?.detectedLanguage?.language,
+      results: data.map((entry, index) =>
+        decodeHtmlText(entry.translations?.[0]?.text ?? req.texts[index])
+      ),
     };
   },
 };

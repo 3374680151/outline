@@ -178,11 +178,9 @@ function BilingualDocumentScene(props: Props) {
       return;
     }
 
-    sourceDocument.title = value;
     await sourceDocument.save({ title: value });
 
     if (targetDocument) {
-      targetDocument.title = value;
       await targetDocument.save({ title: value });
     }
   };
