@@ -198,6 +198,7 @@ export const TranslatePopover = observer(function TranslatePopover(
   return (
     <Container
       ref={containerRef}
+      data-testid="translate-popover"
       $left={position.left}
       $top={position.top}
       role="dialog"

@@ -37,6 +37,8 @@ export function GrammarTooltip({
 }: GrammarTooltipProps) {
   const { t } = useTranslation();
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -44,8 +46,22 @@ export function GrammarTooltip({
       }
     };
 
+    const handleClick = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        event.target instanceof Node &&
+        !containerRef.current.contains(event.target)
+      ) {
+        onClose();
+      }
+    };
+
     document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    document.addEventListener("mousedown", handleClick, true);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", handleClick, true);
+    };
   }, [onClose]);
 
   const type = matchType(match);
@@ -55,7 +71,7 @@ export function GrammarTooltip({
   const context = match.context;
 
   return (
-    <Card role="dialog" aria-label={t("Grammar issue")}>
+    <Card ref={containerRef} role="dialog" aria-label={t("Grammar issue")} data-testid="grammar-tooltip">
       <Header>
         <CategoryDot $color={categoryColor} />
         <CategoryName>
@@ -80,7 +96,7 @@ export function GrammarTooltip({
       {canFix && replacements.length > 0 && (
         <Replacements>
           {replacements.slice(0, 4).map((value) => (
-            <FixButton key={value} onClick={() => onFix(value)}>
+            <FixButton key={value} data-testid="grammar-fix" onClick={() => onFix(value)}>
               {value}
             </FixButton>
           ))}
