@@ -258,7 +258,7 @@ function BilingualDocumentScene(props: Props) {
         )}
       </BilingualHeader>
       <Panes>
-        <Pane>
+        <Pane data-bilingual-pane="source">
           <PaneHeader>
             <TitleInput
               value={sourceDocument?.title ?? ""}
@@ -279,7 +279,7 @@ function BilingualDocumentScene(props: Props) {
           </EditorScroll>
         </Pane>
         <Divider />
-        <Pane>
+        <Pane data-bilingual-pane="target">
           <PaneHeader>
             <TitleInput
               value={targetDocument?.title ?? ""}
