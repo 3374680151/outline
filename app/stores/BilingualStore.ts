@@ -3,6 +3,7 @@ import type { EditorView } from "prosemirror-view";
 import type {
   BilingualBlockState,
   BilingualPairDTO,
+  WordLookupDTO,
 } from "@shared/types/bilingual";
 import Logger from "~/utils/Logger";
 import { client } from "~/utils/ApiClient";
@@ -254,6 +255,31 @@ class BilingualStore {
    */
   getView = (documentId: string): EditorView | undefined =>
     this.views.get(documentId);
+
+/**
+   * Looks a word up in the AI dictionary (requires an AI translation
+   * provider to be configured server-side).
+   *
+   * @param word The word or short phrase.
+   * @param context Optional sentence containing the word.
+   * @returns The dictionary entry, or null when unavailable.
+   */
+  lookupWord = async (
+    word: string,
+    context?: string
+  ): Promise<WordLookupDTO | null> => {
+    try {
+      const res = await client.post("/translations.word", {
+        word,
+        ...(context ? { context } : {}),
+      });
+      const data = res.data as { available?: boolean; entry?: WordLookupDTO };
+      return data?.available ? data.entry ?? null : null;
+    } catch (err) {
+      Logger.warn("translations.word lookup failed", { err });
+      return null;
+    }
+  };
 }
 
 export default new BilingualStore();

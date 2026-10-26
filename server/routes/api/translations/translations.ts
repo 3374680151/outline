@@ -14,6 +14,7 @@ import {
   listProviders,
   translateWithFallback,
 } from "@server/services/translation/registry";
+import { lookupWordWithAI } from "@server/services/translation/providers/openaiCompatible";
 import * as T from "./schema";
 
 const router = new Router();
@@ -87,7 +88,7 @@ router.post(
 
     const providerKey = provider?.id ?? "chain";
     const fromKey = from ?? "auto";
-    const results: (string | undefined)[] = new Array(input.length);
+    const results: (string | undefined)[] = Array.from({ length: input.length });
     const misses: { index: number; text: string; cacheKey: string }[] = [];
 
     await Promise.all(
@@ -157,6 +158,47 @@ router.post(
         to,
       },
     };
+  }
+);
+
+router.post(
+  "translations.word",
+  auth(),
+  rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
+  validate(T.TranslationsWordSchema),
+  async (ctx: APIContext<T.TranslationsWordReq>) => {
+    const { word, context, to } = ctx.input.body;
+    const cacheKey = `word-lookup:${to}:${createHash("sha256")
+      .update(`${word}|${context ?? ""}`)
+      .digest("hex")}`;
+
+    const cached = await CacheHelper.getData<Record<string, unknown>>(cacheKey);
+
+    if (cached) {
+      ctx.body = { data: cached };
+      return;
+    }
+
+    let result: Record<string, unknown> | undefined;
+
+    try {
+      const entry = await lookupWordWithAI(word, context, new AbortController().signal);
+
+      if (entry) {
+        result = { available: true, entry };
+        await CacheHelper.setData(cacheKey, result, TRANSLATION_CACHE_TTL * 7);
+      }
+    } catch (err) {
+      Logger.warn("translations.word failed", { err });
+    }
+
+    if (!result) {
+      // No AI provider configured or lookup failed – the client falls back
+      // to the plain translation card.
+      result = { available: false };
+    }
+
+    ctx.body = { data: result };
   }
 );
 

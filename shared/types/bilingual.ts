@@ -82,3 +82,15 @@ export interface GrammarMatchDTO {
     isPremium?: boolean;
   };
 }
+
+/** AI dictionary entry for a word lookup (FluentRead-compatible protocol). */
+export interface WordLookupDTO {
+  /** The looked-up word. */
+  word: string;
+  /** International phonetic alphabet, empty when unavailable. */
+  phonetic?: string;
+  /** Parts of speech with meanings (at most 4). */
+  senses: { pos: string; meaning: string }[];
+  /** Example sentences with translations (at most 2). */
+  examples: { src: string; dst: string }[];
+}
