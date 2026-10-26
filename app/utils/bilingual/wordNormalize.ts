@@ -58,3 +58,36 @@ export function wordAtOffset(text: string, offset: number): string | null {
 
   return null;
 }
+
+/**
+ * Returns the sentence containing a character offset in a text. Sentence
+ * boundaries are `.`, `!`, `?` followed by whitespace, or a line break.
+ *
+ * @param text The block text.
+ * @param offset The UTF-16 offset of interest.
+ * @returns The sentence text containing the offset (trimmed, may be empty).
+ */
+export function sentenceAtOffset(text: string, offset: number): string {
+  if (!text || offset < 0 || offset > text.length) {
+    return "";
+  }
+
+  const boundary = /(?:[.!?]|\n)/g;
+  let start = 0;
+  let match: RegExpExecArray | null = boundary.exec(text.slice(0, offset));
+
+  while (match) {
+    start = match.index + 1;
+    match = boundary.exec(text.slice(0, offset));
+  }
+
+  boundary.lastIndex = offset;
+  let end = text.length;
+  match = boundary.exec(text);
+
+  if (match) {
+    end = match.index + 1;
+  }
+
+  return text.slice(start, end).trim();
+}

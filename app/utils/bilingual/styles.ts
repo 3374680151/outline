@@ -17,15 +17,19 @@ const CSS = `
 }
 
 .bilingual-grammar-typo {
-  text-decoration-color: #ed2651;
+  text-decoration-color: #dc2626;
 }
 
 .bilingual-grammar-grammar {
-  text-decoration-color: #0366d6;
+  text-decoration-color: #d97706;
+}
+
+.bilingual-grammar-punct {
+  text-decoration-color: #2563eb;
 }
 
 .bilingual-grammar-style {
-  text-decoration-color: #f08a24;
+  text-decoration-color: #7c3aed;
   text-decoration-style: dotted;
 }
 
@@ -50,15 +54,19 @@ const CSS = `
 }
 
 .bilingual-issue-dot.bilingual-grammar-typo {
-  background: #ed2651;
+  background: #dc2626;
 }
 
 .bilingual-issue-dot.bilingual-grammar-grammar {
-  background: #0366d6;
+  background: #d97706;
+}
+
+.bilingual-issue-dot.bilingual-grammar-punct {
+  background: #2563eb;
 }
 
 .bilingual-issue-dot.bilingual-grammar-style {
-  background: #f08a24;
+  background: #7c3aed;
 }
 `;
 

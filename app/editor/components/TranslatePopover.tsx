@@ -3,7 +3,10 @@ import * as React from "react";
 import styled from "styled-components";
 import { s } from "@shared/styles";
 import { useTranslation } from "react-i18next";
+import type { GrammarMatchDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
+import { grammarLevel } from "~/utils/bilingual/prefs";
+import { GRAMMAR_TYPE_COLOR, matchType, type GrammarType } from "~/utils/bilingual/matchType";
 import { clampPanelPosition } from "~/utils/bilingual/overlay";
 
 /** Width of the translation popover. */
@@ -24,6 +27,8 @@ export interface TranslatePopoverProps {
   blockIndex: number;
   /** The document the text belongs to. */
   documentId: string;
+  /** The sentence containing a word lookup, for the grammar section. */
+  sentence?: string;
   /** Viewport anchor rect to place the popover against. */
   anchor: { left: number; right: number; top: number; bottom: number };
   /** Called to write the translation into the mirror document block. */
@@ -41,7 +46,7 @@ export const TranslatePopover = observer(function TranslatePopover(
   props: TranslatePopoverProps
 ) {
   const { t } = useTranslation();
-  const { text, isWord, blockIndex, anchor, onInsertText, onClose } = props;
+  const { text, isWord, blockIndex, anchor, sentence, onInsertText, onClose } = props;
   const [result, setResult] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -49,6 +54,9 @@ export const TranslatePopover = observer(function TranslatePopover(
     { id: string; label: string; configured: boolean }[]
   >([]);
   const [providerId, setProviderId] = React.useState<string>("");
+  const [grammarMatches, setGrammarMatches] = React.useState<
+    { message: string; shortMessage?: string; type: string }[]
+  >([]);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState({ left: 0, top: 0, above: false });
 
@@ -90,6 +98,46 @@ export const TranslatePopover = observer(function TranslatePopover(
       cancelled = true;
     };
   }, [text, providerId, t]);
+
+  React.useEffect(() => {
+    // Word lookups also show the sentence's grammar issues inline.
+    if (!isWord || !sentence) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void BilingualStore.grammarCheck({
+      text: sentence,
+      language: "en-US",
+      level: grammarLevel(),
+      mode: "all",
+    })
+      .then((result) => {
+        if (cancelled || !result.available || !Array.isArray(result.matches)) {
+          return;
+        }
+
+        setGrammarMatches(
+          (result.matches as {
+            message: string;
+            shortMessage?: string;
+            rule: { id: string };
+          }[]).map((match) => ({
+            message: match.message,
+            shortMessage: match.shortMessage,
+            type: matchType(match as unknown as GrammarMatchDTO),
+          }))
+        );
+      })
+      .catch(() => {
+        // Grammar sidecar unavailable – the card still shows the meaning.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isWord, sentence]);
 
   React.useEffect(() => {
     // Measure after first paint so the clamp uses the real size.
@@ -187,6 +235,17 @@ export const TranslatePopover = observer(function TranslatePopover(
           result
         )}
       </Result>
+      {isWord && grammarMatches.length > 0 && (
+        <GrammarSection>
+          <GrammarTitle>{t("Grammar in this sentence")}</GrammarTitle>
+          {grammarMatches.map((issue, issueIndex) => (
+            <GrammarIssue key={issueIndex}>
+              <TypeBadgeInline $type={issue.type}>{issue.type}</TypeBadgeInline>
+              {issue.shortMessage ?? issue.message}
+            </GrammarIssue>
+          ))}
+        </GrammarSection>
+      )}
       <Actions>
         <ActionButton onClick={handleCopy} disabled={!result}>
           {t("Copy")}
@@ -272,6 +331,38 @@ const LoadingDots = styled.span`
 
 const ErrorText = styled.span`
   color: ${s("danger")};
+`;
+
+const GrammarSection = styled.div`
+  border-top: 1px solid ${s("divider")};
+  padding-top: 8px;
+  margin-top: 4px;
+`;
+
+const GrammarTitle = styled.div`
+  font-size: 11px;
+  font-weight: 600;
+  color: ${s("textSecondary")};
+  margin-bottom: 6px;
+`;
+
+const GrammarIssue = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  padding: 3px 0;
+`;
+
+const TypeBadgeInline = styled.span<{ $type: string }>`
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 99px;
+  padding: 0 6px;
+  flex: none;
+  text-transform: capitalize;
+  background: ${(props) => GRAMMAR_TYPE_COLOR[(props.$type as GrammarType) ?? "other"] ?? "#64748b"}1f;
+  color: ${(props) => GRAMMAR_TYPE_COLOR[(props.$type as GrammarType) ?? "other"] ?? "#64748b"};
 `;
 
 const Actions = styled.div`

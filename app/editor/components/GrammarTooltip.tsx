@@ -3,6 +3,7 @@ import styled from "styled-components";
 import { s } from "@shared/styles";
 import type { GrammarMatchDTO } from "@shared/types/bilingual";
 import { useTranslation } from "react-i18next";
+import { GRAMMAR_TYPE_COLOR, matchType } from "~/utils/bilingual/matchType";
 
 /**
  * Props for the grammar issue tooltip.
@@ -47,12 +48,9 @@ export function GrammarTooltip({
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const categoryColor =
-    match.rule.category.id.toUpperCase() === "TYPO"
-      ? "#ed2651"
-      : match.rule.category.id.toUpperCase() === "GRAMMAR"
-        ? "#0366d6"
-        : "#f08a24";
+  const type = matchType(match);
+  const categoryColor = GRAMMAR_TYPE_COLOR[type];
+  const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
 
   const context = match.context;
 
@@ -63,11 +61,13 @@ export function GrammarTooltip({
         <CategoryName>
           {match.shortMessage ?? match.rule.category.name}
         </CategoryName>
+        <TypeBadge $color={categoryColor}>{typeLabel}</TypeBadge>
         <CloseButton onClick={onClose} aria-label={t("Close")}>
           ✕
         </CloseButton>
       </Header>
       <Message>{match.message}</Message>
+      <RuleId>{match.rule.id}</RuleId>
       {context.text && (
         <Context>
           {context.text.slice(0, context.offset)}
@@ -139,7 +139,27 @@ const CloseButton = styled.button`
 `;
 
 const Message = styled.div`
+  margin-bottom: 6px;
+`;
+
+const TypeBadge = styled.span<{ $color: string }>`
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 99px;
+  padding: 1px 8px;
+  flex: none;
+  background: ${(props) => props.$color}1f;
+  color: ${(props) => props.$color};
+`;
+
+const RuleId = styled.div`
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  color: ${s("textTertiary")};
   margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const Context = styled.div`

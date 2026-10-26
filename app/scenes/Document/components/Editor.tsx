@@ -230,17 +230,21 @@ function DocumentEditor(props: Props) {
   const direction = titleRef.current?.getComputedDirection();
 
   const editorExtensions = React.useMemo(
-    () => [
-      ...extensions,
-      new HoverTranslateExtension({ mode: translationTrigger() }),
-      new GrammarCheckExtension({
-        enabled:
-          grammarCheckingEnabled() &&
-          (team?.getPreference(TeamPreference.GrammarChecking) ?? true),
-        level: grammarLevel(),
-        language: "en-US",
-      }),
-    ],
+    () => {
+      const grammarEnabled =
+        grammarCheckingEnabled() &&
+        (team?.getPreference(TeamPreference.GrammarChecking) ?? true);
+
+      return [
+        ...extensions,
+        new HoverTranslateExtension({ mode: translationTrigger() }),
+        new GrammarCheckExtension({
+          enabled: grammarEnabled,
+          level: grammarLevel(),
+          language: "en-US",
+        }),
+      ];
+    },
     [team]
   );
 

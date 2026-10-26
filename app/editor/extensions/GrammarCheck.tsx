@@ -2,6 +2,7 @@ import { observable, runInAction } from "mobx";
 import { Plugin, PluginKey } from "prosemirror-state";
 import type { EditorState, Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
+import type { EditorView } from "prosemirror-view";
 import type { Node as ProseMirrorNode } from "prosemirror-model";
 import Extension from "@shared/editor/lib/Extension";
 import depths from "@shared/styles/depths";
@@ -18,6 +19,7 @@ import {
 } from "~/utils/bilingual/overlay";
 import { buildParagraphMapFromNode } from "~/utils/bilingual/prosemirrorText";
 import { ensureBilingualStyles } from "~/utils/bilingual/styles";
+import { matchType } from "~/utils/bilingual/matchType";
 
 /**
  * Options for the grammar check extension.
@@ -54,17 +56,7 @@ const IGNORED_RULES_KEY = "bilingual-grammar-ignored-rules";
 
 /** Visual class per LanguageTool category. */
 function categoryClass(match: GrammarMatchDTO): string {
-  const category = match.rule.category.id.toUpperCase();
-
-  if (category === "TYPO") {
-    return "bilingual-grammar-typo";
-  }
-
-  if (category === "GRAMMAR") {
-    return "bilingual-grammar-grammar";
-  }
-
-  return "bilingual-grammar-style";
+  return `bilingual-grammar-${matchType(match)}`;
 }
 
 /**
@@ -148,6 +140,57 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
         props: {
           decorations: (state: EditorState) =>
             this.buildDecorationSet(state.doc),
+          handleDOMEvents: {
+            // Clicking an underline opens its issue card, matching the
+            // grammar web workbench where every highlight is clickable.
+            mousedown: (view: EditorView, event: MouseEvent) => {
+              const target = event.target as HTMLElement;
+
+              if (!target.classList?.contains("bilingual-underline")) {
+                return false;
+              }
+
+              const coords = view.posAtCoords({
+                left: event.clientX,
+                top: event.clientY,
+              });
+
+              if (!coords) {
+                return false;
+              }
+
+              const blockIndex = view.state.doc.resolve(coords.pos).index(0);
+              const rawMatches = this.matchesByBlock.get(blockIndex) ?? [];
+
+              for (const raw of rawMatches) {
+                const range = blockRangeInDoc(view.state.doc, blockIndex);
+
+                if (!range) {
+                  break;
+                }
+
+                const map = buildParagraphMapFromNode(range.node, range.from);
+                const resolved = pmRangeForOffset(
+                  map,
+                  raw.match.offset,
+                  raw.match.length
+                );
+
+                if (
+                  resolved &&
+                  coords.pos >= resolved.pmStart &&
+                  coords.pos <= resolved.pmEnd
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  this.openTooltip(raw.match, blockIndex, raw.textHash);
+                  return true;
+                }
+              }
+
+              return false;
+            },
+          },
         },
         view: (editorView) => {
           // Underlines and issue dots render through raw DOM decorations, so
@@ -386,9 +429,12 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
       const dotsClass = "bilingual-issue-dots";
       const matches = rawMatches;
+      // Place the dots inline right after the block's last character so they
+      // ride on the final text line instead of floating between blocks.
+      const inlineEnd = range.from + 1 + range.node.content.size;
 
       widgetDecorations.push(
-        Decoration.widget(range.to, () => {
+        Decoration.widget(inlineEnd, () => {
           const container = document.createElement("span");
           container.className = dotsClass;
 
@@ -407,7 +453,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
           });
 
           return container;
-        }, { key: `issues-${index}-${rawMatches[0]?.textHash ?? ""}`, side: 1 })
+        }, { key: `issues-${index}-${rawMatches[0]?.textHash ?? ""}`, side: 10 })
       );
     }
 

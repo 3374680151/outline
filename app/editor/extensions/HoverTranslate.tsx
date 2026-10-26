@@ -13,7 +13,7 @@ import {
   type ReactOverlay,
   VIEWPORT_INSET,
 } from "~/utils/bilingual/overlay";
-import { wordAtOffset } from "~/utils/bilingual/wordNormalize";
+import { normalizeEnglishWord, sentenceAtOffset, wordAtOffset } from "~/utils/bilingual/wordNormalize";
 
 /**
  * Options for the hover translate extension.
@@ -61,6 +61,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
     text: string;
     blockIndex: number;
     isWord: boolean;
+    sentence?: string;
   } | null = null;
 
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,15 +185,31 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       return;
     }
 
+    // A single-word selection behaves like the hovered-word flow: the card
+    // with meaning and sentence grammar opens directly. Longer selections
+    // keep the click-to-translate dot.
+    const isWord = !!normalizeEnglishWord(text) && text.trim().split(/\s+/).length === 1;
+    const parentText = selection.$from.parent.textContent;
+    const sentence = isWord
+      ? sentenceAtOffset(parentText, selection.$from.parentOffset)
+      : undefined;
+
     this.dot = {
-      left: anchor.right + 14,
-      top: anchor.bottom - 4,
+      // FluentRead-style placement: just below the right edge of the
+      // selection's last line.
+      left: anchor.right + 10,
+      top: anchor.bottom + 6,
       anchor,
       text,
       blockIndex: selection.$from.index(0),
-      isWord: false,
+      isWord,
+      sentence,
     };
     this.renderDot();
+
+    if (isWord && this.editor) {
+      this.openPopover(this.editor.props.id as string);
+    }
   });
 
   /**
@@ -248,14 +265,20 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
         const anchor = view.coordsAtPos(result.pos);
 
         this.dot = {
-          left: anchor.right + 14,
-          top: anchor.bottom - 4,
+          left: anchor.right + 10,
+          top: anchor.bottom + 6,
           anchor,
           text: word,
           blockIndex: $pos.index(0),
           isWord: true,
+          sentence: sentenceAtOffset($pos.parent.textContent, $pos.parentOffset),
         };
         this.renderDot();
+        // Word lookups open the card directly (FluentRead "direct" mode):
+        // meaning and sentence grammar appear without a second click.
+        if (this.editor) {
+          this.openPopover(this.editor.props.id as string);
+        }
       }),
       HOVER_DELAY_MS
     );
@@ -344,6 +367,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       blockIndex: dot.blockIndex,
       documentId,
       anchor: dot.anchor,
+      sentence: dot.sentence,
       onInsertText: this.options.onInsertText,
       onClose: action(() => this.closePopover()),
     };
