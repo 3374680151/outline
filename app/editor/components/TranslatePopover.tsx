@@ -3,7 +3,7 @@ import * as React from "react";
 import styled from "styled-components";
 import { s } from "@shared/styles";
 import { useTranslation } from "react-i18next";
-import type { GrammarMatchDTO } from "@shared/types/bilingual";
+import type { GrammarMatchDTO, WordLookupDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import { grammarLevel } from "~/utils/bilingual/prefs";
 import { GRAMMAR_TYPE_COLOR, matchType, type GrammarType } from "~/utils/bilingual/matchType";
@@ -57,6 +57,7 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [grammarMatches, setGrammarMatches] = React.useState<
     { message: string; shortMessage?: string; type: string }[]
   >([]);
+  const [dictEntry, setDictEntry] = React.useState<WordLookupDTO | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState({ left: 0, top: 0, above: false });
 
@@ -138,6 +139,30 @@ export const TranslatePopover = observer(function TranslatePopover(
       cancelled = true;
     };
   }, [isWord, sentence]);
+
+  React.useEffect(() => {
+    // Word lookups also try the AI dictionary card (phonetics, senses,
+    // examples) when an AI provider is configured server-side.
+    if (!isWord || !sentence) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void BilingualStore.lookupWord(text, sentence)
+      .then((entry) => {
+        if (!cancelled && entry) {
+          setDictEntry(entry);
+        }
+      })
+      .catch(() => {
+        // Silent: the plain translation result remains the fallback.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isWord, sentence, text]);
 
   React.useEffect(() => {
     // Measure after first paint so the clamp uses the real size.
@@ -236,6 +261,35 @@ export const TranslatePopover = observer(function TranslatePopover(
           result
         )}
       </Result>
+      {isWord && dictEntry && (
+        <DictSection>
+          <DictWord>
+            {dictEntry.word}
+            {dictEntry.phonetic && <Phonetic>/{dictEntry.phonetic}/</Phonetic>}
+          </DictWord>
+          {dictEntry.senses.length > 0 && (
+            <SenseList>
+              {dictEntry.senses.map((sense, senseIndex) => (
+                <Sense key={senseIndex}>
+                  {sense.pos && <Pos>{sense.pos}</Pos>}
+                  {sense.meaning}
+                </Sense>
+              ))}
+            </SenseList>
+          )}
+          {dictEntry.examples.length > 0 && (
+            <SenseList>
+              {dictEntry.examples.map((example, exampleIndex) => (
+                <Sense key={exampleIndex}>
+                  {example.src}
+                  <Muted> {example.dst}</Muted>
+                </Sense>
+              ))}
+            </SenseList>
+          )}
+          <DictNote>{t("AI generated, for reference")}</DictNote>
+        </DictSection>
+      )}
       {isWord && grammarMatches.length > 0 && (
         <GrammarSection>
           <GrammarTitle>{t("Grammar in this sentence")}</GrammarTitle>
@@ -332,6 +386,53 @@ const LoadingDots = styled.span`
 
 const ErrorText = styled.span`
   color: ${s("danger")};
+`;
+
+const DictSection = styled.div`
+  border-top: 1px solid ${s("divider")};
+  padding-top: 8px;
+  margin-top: 4px;
+`;
+
+const DictWord = styled.div`
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+`;
+
+const Phonetic = styled.span`
+  font-weight: 400;
+  color: ${s("textSecondary")};
+  font-size: 12.5px;
+`;
+
+const SenseList = styled.ul`
+  margin: 0 0 6px;
+  padding-left: 16px;
+`;
+
+const Sense = styled.li`
+  font-size: 13px;
+  margin-bottom: 2px;
+`;
+
+const Pos = styled.span`
+  color: ${s("accent")};
+  font-style: italic;
+  margin-right: 6px;
+  font-size: 12px;
+`;
+
+const Muted = styled.span`
+  color: ${s("textSecondary")};
+`;
+
+const DictNote = styled.div`
+  font-size: 10.5px;
+  color: ${s("textTertiary")};
 `;
 
 const GrammarSection = styled.div`

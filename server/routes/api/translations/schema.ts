@@ -40,3 +40,18 @@ export const TranslationsTranslateSchema = BaseSchema.extend({
 export type TranslationsTranslateReq = z.infer<
   typeof TranslationsTranslateSchema
 >;
+
+export const TranslationsWordSchema = BaseSchema.extend({
+  body: z.object({
+    /** The word or short phrase to look up. */
+    word: z.string().min(1).max(64),
+
+    /** Optional sentence containing the word, for disambiguation. */
+    context: z.string().max(1000).optional(),
+
+    /** Target language of the meanings, defaults to zh. */
+    to: z.string().max(5).default("zh"),
+  }),
+});
+
+export type TranslationsWordReq = z.infer<typeof TranslationsWordSchema>;
