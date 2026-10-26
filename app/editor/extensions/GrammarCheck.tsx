@@ -380,6 +380,15 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
       this.notifyIssueCount();
     });
 
+    // Matches live outside plugin state, so a transaction is dispatched to
+    // make ProseMirror re-evaluate the decorations prop. An empty
+    // transaction carries no document change and is not undoable.
+    const activeView = this.editor?.view;
+
+    if (activeView && !activeView.isDestroyed) {
+      activeView.dispatch(activeView.state.tr.setMeta("bilingual-grammar-refresh", true));
+    }
+
     // Large documents exceed one flush; keep draining the queue.
     if (this.queue.size > 0) {
       this.scheduleCheck();
