@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { s } from "@shared/styles";
 import type { GrammarMatchDTO } from "@shared/types/bilingual";
 import { useTranslation } from "react-i18next";
-import { GRAMMAR_TYPE_COLOR, matchType } from "~/utils/bilingual/matchType";
+import { GRAMMAR_TYPE_COLOR, GRAMMAR_TYPE_LABEL, matchType } from "~/utils/bilingual/matchType";
 
 /**
  * Props for the grammar issue tooltip.
@@ -50,7 +50,7 @@ export function GrammarTooltip({
 
   const type = matchType(match);
   const categoryColor = GRAMMAR_TYPE_COLOR[type];
-  const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+  const typeLabel = GRAMMAR_TYPE_LABEL[type];
 
   const context = match.context;
 

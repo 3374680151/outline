@@ -72,7 +72,7 @@ export function sentenceAtOffset(text: string, offset: number): string {
     return "";
   }
 
-  const boundary = /(?:[.!?]|\n)/g;
+  const boundary = /(?:[.!?](?=\s)|\n)/g;
   let start = 0;
   let match: RegExpExecArray | null = boundary.exec(text.slice(0, offset));
 

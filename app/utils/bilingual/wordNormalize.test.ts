@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEnglishWord, wordAtOffset } from "./wordNormalize";
+import { normalizeEnglishWord, sentenceAtOffset, wordAtOffset } from "./wordNormalize";
 
 describe("normalizeEnglishWord", () => {
   it("accepts plain words", () => {
@@ -62,5 +62,29 @@ describe("wordAtOffset", () => {
 
   it("returns the last word at the text end boundary", () => {
     expect(wordAtOffset("word", 3)).toBe("word");
+  });
+});
+
+describe("sentenceAtOffset", () => {
+  const text = "The value is 3.14 meters. Node.js is great! Really?";
+
+  it("returns the sentence containing the offset", () => {
+    const idx = text.indexOf("3.14");
+    expect(sentenceAtOffset(text, idx)).toBe("The value is 3.14 meters.");
+  });
+
+  it("does not split on decimal points or abbreviations", () => {
+    const idx = text.indexOf("Node.js");
+    expect(sentenceAtOffset(text, idx)).toBe("Node.js is great!");
+  });
+
+  it("splits on sentence punctuation followed by whitespace", () => {
+    const idx = text.indexOf("Really");
+    expect(sentenceAtOffset(text, idx)).toBe("Really?");
+  });
+
+  it("returns empty for out-of-range offsets", () => {
+    expect(sentenceAtOffset(text, -1)).toBe("");
+    expect(sentenceAtOffset(text, text.length + 10)).toBe("");
   });
 });

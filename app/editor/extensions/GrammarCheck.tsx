@@ -453,7 +453,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
           });
 
           return container;
-        }, { key: `issues-${index}-${rawMatches[0]?.textHash ?? ""}`, side: 10 })
+        }, { key: `issues-${index}-${rawMatches[0]?.textHash ?? ""}-${rawMatches.length}-${rawMatches[0]?.match.rule.id ?? ""}`, side: 10 })
       );
     }
 

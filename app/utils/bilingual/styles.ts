@@ -33,6 +33,10 @@ const CSS = `
   text-decoration-style: dotted;
 }
 
+.bilingual-grammar-other {
+  text-decoration-color: #64748b;
+}
+
 .bilingual-issue-dots {
   display: inline-flex;
   gap: 5px;
@@ -67,6 +71,10 @@ const CSS = `
 
 .bilingual-issue-dot.bilingual-grammar-style {
   background: #7c3aed;
+}
+
+.bilingual-issue-dot.bilingual-grammar-other {
+  background: #64748b;
 }
 `;
 
