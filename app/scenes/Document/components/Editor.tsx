@@ -40,13 +40,11 @@ import { decodeURIComponentSafe } from "~/utils/urls";
 import MultiplayerEditor from "./AsyncMultiplayerEditor";
 import DocumentMeta from "./DocumentMeta";
 import DocumentTitle from "./DocumentTitle";
+import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
+import BilingualMirrorExtension from "~/editor/extensions/BilingualMirror";
 import HoverTranslateExtension from "~/editor/extensions/HoverTranslate";
 import GrammarCheckExtension from "~/editor/extensions/GrammarCheck";
-import {
-  grammarCheckingEnabled,
-  grammarLevel,
-  translationTrigger,
-} from "~/utils/bilingual/prefs";
+import { useBilingualPair } from "~/components/BilingualPairProvider";
 import { TeamPreference } from "@shared/types";
 import { first } from "es-toolkit/compat";
 import useShare from "@shared/hooks/useShare";
@@ -229,24 +227,63 @@ function DocumentEditor(props: Props) {
 
   const direction = titleRef.current?.getComputedDirection();
 
-  const editorExtensions = React.useMemo(
-    () => {
-      const grammarEnabled =
-        grammarCheckingEnabled() &&
-        (team?.getPreference(TeamPreference.GrammarChecking) ?? true);
+  const {
+    active: bilingualActive,
+    engine: bilingualEngineFromContext,
+    sideOf: bilingualSideOf,
+    registerGrammarExtension,
+  } = useBilingualPair();
+  const bilingualSide = bilingualSideOf(document.id);
+  const bilingualEngine = bilingualActive ? bilingualEngineFromContext : null;
 
-      return [
-        ...extensions,
-        new HoverTranslateExtension({ mode: translationTrigger() }),
-        new GrammarCheckExtension({
-          enabled: grammarEnabled,
-          level: grammarLevel(),
-          language: "en-US",
-        }),
-      ];
-    },
-    [team]
-  );
+  // Bilingual extensions are built once and resolve their live state at
+  // event time through this ref: editors mount before the pair resolves, so
+  // the side and engine can only be known when the events happen.
+  const bilingualStateRef = React.useRef<{
+    side: "source" | "target" | undefined;
+    engine: MirrorEngine | null;
+  }>({ side: bilingualSide, engine: bilingualEngine });
+  bilingualStateRef.current = { side: bilingualSide, engine: bilingualEngine };
+
+  const grammarExtensionRef = React.useRef<GrammarCheckExtension | null>(null);
+
+  const editorExtensions = React.useMemo(() => {
+    const grammarExtension = new GrammarCheckExtension({
+      language: "en-US",
+      gate: () =>
+        bilingualStateRef.current.side !== "target" &&
+        (team?.getPreference(TeamPreference.GrammarChecking) ?? true),
+    });
+    grammarExtensionRef.current = grammarExtension;
+
+    return [
+      ...extensions,
+      new BilingualMirrorExtension({
+        getState: () => bilingualStateRef.current,
+      }),
+      new HoverTranslateExtension({
+        gate: () => bilingualStateRef.current.side !== "target",
+        onInsertText: (blockIndex: number, text: string) =>
+          bilingualStateRef.current.engine?.forceWrite(blockIndex, text),
+      }),
+      grammarExtension,
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    const extension = grammarExtensionRef.current;
+
+    if (extension && bilingualActive && bilingualSide === "source") {
+      registerGrammarExtension(extension);
+    }
+
+    return () => {
+      if (extension) {
+        registerGrammarExtension(null);
+      }
+    };
+  }, [bilingualActive, registerGrammarExtension, bilingualSide]);
 
   return (
     <Flex auto column>

@@ -100,5 +100,5 @@ export type TeamPreferences = {
   [TeamPreference.GrammarChecking]?: boolean;
   [TeamPreference.GrammarLevel]?: "default" | "picky";
   [TeamPreference.GrammarDisabledRules]?: string;
-  [TeamPreference.TranslationTrigger]?: "dot" | "selection" | "off";
+  [TeamPreference.TranslationTrigger]?: "dot" | "hover" | "off";
 };

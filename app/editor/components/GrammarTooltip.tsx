@@ -15,8 +15,12 @@ export interface GrammarTooltipProps {
   canFix: boolean;
   /** Replacement values offered by the rule. */
   replacements: string[];
+  /** Position of this issue in the document, e.g. "3/12". */
+  positionLabel?: string;
   /** Applies a replacement. */
   onFix: (value: string) => void;
+  /** Skips this occurrence only, keeping the rule active. */
+  onSkip: () => void;
   /** Ignores the rule for this user. */
   onIgnore: () => void;
   /** Closes the tooltip. */
@@ -24,14 +28,17 @@ export interface GrammarTooltipProps {
 }
 
 /**
- * Detail card for a single grammar issue: category, explanation, context
- * with the issue highlighted, replacement actions, and rule ignore.
+ * Fix card for a single grammar issue, modeled on LanguageTool's review
+ * card: a type chip, one explanation line, replacement chips, and a compact
+ * action row. Deliberately minimal — the surrounding editor is the context.
  */
 export function GrammarTooltip({
   match,
   canFix,
   replacements,
+  positionLabel,
   onFix,
+  onSkip,
   onIgnore,
   onClose,
 }: GrammarTooltipProps) {
@@ -68,35 +75,26 @@ export function GrammarTooltip({
   const categoryColor = GRAMMAR_TYPE_COLOR[type];
   const typeLabel = GRAMMAR_TYPE_LABEL[type];
 
-  const context = match.context;
-
   return (
     <Card ref={containerRef} role="dialog" aria-label={t("Grammar issue")} data-testid="grammar-tooltip">
       <Header>
-        <CategoryDot $color={categoryColor} />
-        <CategoryName>
-          {match.shortMessage ?? match.rule.category.name}
-        </CategoryName>
         <TypeBadge $color={categoryColor}>{typeLabel}</TypeBadge>
+        <CategoryName>{match.shortMessage ?? match.rule.category.name}</CategoryName>
+        {positionLabel && <Position>{positionLabel}</Position>}
         <CloseButton onClick={onClose} aria-label={t("Close")}>
           ✕
         </CloseButton>
       </Header>
       <Message>{match.message}</Message>
-      <RuleId>{match.rule.id}</RuleId>
-      {context.text && (
-        <Context>
-          {context.text.slice(0, context.offset)}
-          <Mark $color={categoryColor}>
-            {context.text.slice(context.offset, context.offset + context.length)}
-          </Mark>
-          {context.text.slice(context.offset + context.length)}
-        </Context>
-      )}
       {canFix && replacements.length > 0 && (
         <Replacements>
-          {replacements.slice(0, 4).map((value) => (
-            <FixButton key={value} data-testid="grammar-fix" onClick={() => onFix(value)}>
+          {replacements.slice(0, 4).map((value, index) => (
+            <FixButton
+              key={value}
+              data-testid="grammar-fix"
+              $recommended={index === 0}
+              onClick={() => onFix(value)}
+            >
               {value}
             </FixButton>
           ))}
@@ -106,7 +104,8 @@ export function GrammarTooltip({
         <Hint>{t("This issue spans formatting and cannot be auto-fixed")}</Hint>
       )}
       <Footer>
-        <IgnoreButton onClick={onIgnore}>{t("Ignore this rule")}</IgnoreButton>
+        <GhostButton onClick={onSkip}>{t("Skip once")}</GhostButton>
+        <GhostButton onClick={onIgnore}>{t("Ignore rule")}</GhostButton>
       </Footer>
     </Card>
   );
@@ -115,7 +114,7 @@ export function GrammarTooltip({
 export default GrammarTooltip;
 
 const Card = styled.div`
-  width: 320px;
+  width: 360px;
   background: ${s("background")};
   color: ${s("text")};
   border: 1px solid ${s("divider")};
@@ -129,32 +128,7 @@ const Card = styled.div`
 const Header = styled.div`
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-`;
-
-const CategoryDot = styled.span<{ $color: string }>`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: ${(props) => props.$color};
-  flex-shrink: 0;
-`;
-
-const CategoryName = styled.span`
-  font-weight: 600;
-  flex: 1;
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: ${s("textSecondary")};
-  cursor: pointer;
-  padding: 2px 4px;
-`;
-
-const Message = styled.div`
+  gap: 8px;
   margin-bottom: 6px;
 `;
 
@@ -168,45 +142,54 @@ const TypeBadge = styled.span<{ $color: string }>`
   color: ${(props) => props.$color};
 `;
 
-const RuleId = styled.div`
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 10.5px;
-  color: ${s("textTertiary")};
-  margin-bottom: 8px;
+const CategoryName = styled.span`
+  font-weight: 600;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
-const Context = styled.div`
-  background: ${s("backgroundSecondary")};
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  word-break: break-word;
+const Position = styled.span`
+  color: ${s("textTertiary")};
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex: none;
 `;
 
-const Mark = styled.span<{ $color: string }>`
-  text-decoration: underline wavy ${(props) => props.$color};
-  text-underline-offset: 3px;
-  font-weight: 600;
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  color: ${s("textSecondary")};
+  cursor: pointer;
+  padding: 2px 4px;
+  flex: none;
+`;
+
+const Message = styled.div`
+  margin-bottom: 8px;
+  word-break: break-word;
 `;
 
 const Replacements = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 `;
 
-const FixButton = styled.button`
-  background: ${s("accent")};
-  color: #fff;
-  border: none;
+const FixButton = styled.button<{ $recommended: boolean }>`
+  background: ${(props) => (props.$recommended ? s("accent") : s("backgroundSecondary"))};
+  color: ${(props) => (props.$recommended ? "#fff" : s("text"))};
+  border: 1px solid ${(props) => (props.$recommended ? s("accent") : s("divider"))};
   border-radius: 4px;
   padding: 4px 12px;
   font-size: 13px;
   cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const Hint = styled.div`
@@ -218,13 +201,19 @@ const Hint = styled.div`
 const Footer = styled.div`
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid ${s("divider")};
+  padding-top: 8px;
 `;
 
-const IgnoreButton = styled.button`
+const GhostButton = styled.button`
   background: none;
   border: none;
   color: ${s("textSecondary")};
   cursor: pointer;
   font-size: 12px;
-  text-decoration: underline;
+
+  &:hover {
+    color: ${s("text")};
+  }
 `;

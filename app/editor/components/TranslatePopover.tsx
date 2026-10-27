@@ -69,18 +69,19 @@ export const TranslatePopover = observer(function TranslatePopover(
       setError(null);
 
       try {
-        const [translated] = await BilingualStore.translate(
+        const providersPromise = BilingualStore.fetchProviders();
+        const translated = await BilingualStore.translate(
           [text],
           "zh",
           providerId || undefined
         );
-        const configuredProviders = await BilingualStore.fetchProviders();
+        const configuredProviders = await providersPromise;
 
         if (cancelled) {
           return;
         }
 
-        setResult(translated);
+        setResult(translated[0]);
         setProviders(configuredProviders.filter((provider) => provider.configured));
       } catch (_err) {
         if (!cancelled) {

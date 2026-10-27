@@ -126,4 +126,9 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.SortCommentsByOrderInDocument]: true,
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
+  [UserPreference.BilingualTranslationTrigger]: "dot" as const,
+  [UserPreference.BilingualGrammarChecking]: true,
+  [UserPreference.BilingualGrammarLevel]: "default" as const,
+  [UserPreference.BilingualGrammarIgnoredRules]: [],
+  [UserPreference.BilingualAutoTranslate]: true,
 };

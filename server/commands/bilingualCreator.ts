@@ -1,6 +1,5 @@
-import type { NavigationNode } from "@shared/types";
 import { InvalidRequestError } from "@server/errors";
-import { BilingualPair, Collection, Document } from "@server/models";
+import { BilingualPair, Document } from "@server/models";
 import { authorize } from "@server/policies";
 import type { APIContext } from "@server/types";
 import documentCreator from "./documentCreator";
@@ -19,41 +18,10 @@ type Props = {
 };
 
 /**
- * Finds the index of a document within its sibling list in a collection
- * structure tree.
- *
- * @param documentId The document to locate.
- * @param nodes The collection document structure nodes to search.
- * @returns The zero-based sibling index, or -1 when not found.
- */
-function findSiblingIndex(
-  documentId: string,
-  nodes: NavigationNode[]
-): number {
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-
-    if (node.id === documentId) {
-      return i;
-    }
-
-    const nested = node.children
-      ? findSiblingIndex(documentId, node.children)
-      : -1;
-
-    if (nested >= 0) {
-      return nested;
-    }
-  }
-
-  return -1;
-}
-
-/**
  * Creates a bilingual pair: the source document (English, structure
- * authoritative) and a mirror target document (Chinese) with the same title
- * in the same location. When the source is published the mirror is published
- * directly after it in the collection structure.
+ * authoritative) and a mirror target document (Chinese). The mirror is an
+ * unattached draft that only lives inside the bilingual view; it can be
+ * promoted to a regular document explicitly via the save actions.
  *
  * @param ctx the API context containing the acting user and transaction.
  * @param props Either an existing documentId to pair, or the fields for a
@@ -68,7 +36,6 @@ export default async function bilingualCreator(
   const { transaction } = ctx.state;
 
   let source: Document;
-  let siblingIndex = -1;
 
   if (props.documentId) {
     source = await Document.findByPk(props.documentId, {
@@ -87,16 +54,6 @@ export default async function bilingualCreator(
         "Document is already part of a bilingual pair"
       );
     }
-
-    if (source.publishedAt && source.collectionId) {
-      const collection = await Collection.findByPk(source.collectionId, {
-        includeDocumentStructure: true,
-        transaction,
-      });
-      siblingIndex = collection?.documentStructure
-        ? findSiblingIndex(source.id, collection.documentStructure)
-        : -1;
-    }
   } else {
     source = await documentCreator(ctx, {
       title: props.title ?? "",
@@ -106,13 +63,14 @@ export default async function bilingualCreator(
     });
   }
 
+  // The mirror document is created as an unattached draft: it exists so the
+  // collaborative mirror editor has a backing document, but it never appears
+  // in collections or the sidebar. The bilingual view is the only surface it
+  // lives on; "save as a standalone document" promotes it explicitly.
   const target = await documentCreator(ctx, {
     title: source.title,
-    collectionId: source.collectionId ?? undefined,
-    parentDocumentId: source.parentDocumentId ?? undefined,
     language: "zh",
-    publish: !!source.publishedAt,
-    ...(siblingIndex >= 0 ? { index: siblingIndex + 1 } : {}),
+    publish: false,
   });
 
   const pair = await BilingualPair.create(

@@ -2,7 +2,12 @@ import env from "@server/env";
 import Logger from "@server/logging/Logger";
 import fetch from "@server/utils/fetch";
 import type { WordLookupDTO } from "@shared/types/bilingual";
-import type { TranslationProvider, TranslationRequest, TranslationResult } from "../types";
+import type {
+  TeamProviderConfig,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+} from "../types";
 
 const SYSTEM_PROMPT = [
   "You are a translation engine.",
@@ -37,29 +42,41 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
 
 /**
  * Translation provider backed by any OpenAI-compatible chat completion
- * endpoint. The endpoint, key, and model are admin-configured via
- * environment variables.
+ * endpoint. The endpoint, key, and model come from the workspace AI service
+ * configuration when configured, falling back to environment variables.
  */
 const openaiCompatible: TranslationProvider = {
   id: "openai-compatible",
   label: "OpenAI Compatible",
   maxBatch: 20,
 
-  isConfigured() {
-    return !!env.OPENAI_API_KEY && !!env.OPENAI_BASE_URL;
+  isConfigured(config?: TeamProviderConfig | null) {
+    const hasTeam = !!config?.apiKey && !!config?.baseUrl;
+    return hasTeam || (!!env.OPENAI_API_KEY && !!env.OPENAI_BASE_URL);
   },
 
-  async translate(req: TranslationRequest): Promise<TranslationResult> {
-    const response = await fetch(`${env.OPENAI_BASE_URL}/chat/completions`, {
+  async translate(
+    req: TranslationRequest,
+    config?: TeamProviderConfig | null
+  ): Promise<TranslationResult> {
+    const baseUrl = config?.baseUrl || env.OPENAI_BASE_URL;
+    const apiKey = config?.apiKey || env.OPENAI_API_KEY;
+    const model = config?.model || env.OPENAI_TRANSLATION_MODEL;
+
+    if (!baseUrl || !apiKey) {
+      throw new Error("openai-compatible is not configured");
+    }
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       timeout: 60000,
       signal: req.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: env.OPENAI_TRANSLATION_MODEL,
+        model,
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [
@@ -122,22 +139,27 @@ const DICT_SYSTEM_PROMPT = [
 export async function lookupWordWithAI(
   word: string,
   context: string | undefined,
-  signal: AbortSignal
+  signal: AbortSignal,
+  config?: TeamProviderConfig | null
 ): Promise<WordLookupDTO | null> {
-  if (!openaiCompatible.isConfigured()) {
+  if (!openaiCompatible.isConfigured(config)) {
     return null;
   }
 
-  const response = await fetch(`${env.OPENAI_BASE_URL}/chat/completions`, {
+  const baseUrl = config?.baseUrl || env.OPENAI_BASE_URL;
+  const apiKey = config?.apiKey || env.OPENAI_API_KEY;
+  const model = config?.model || env.OPENAI_TRANSLATION_MODEL;
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     timeout: 30000,
     signal,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: env.OPENAI_TRANSLATION_MODEL,
+      model,
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [

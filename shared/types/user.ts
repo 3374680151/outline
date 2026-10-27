@@ -34,6 +34,16 @@ export enum UserPreference {
   NotificationBadge = "notificationBadge",
   /** The display order of the reorderable sections in the sidebar. */
   SidebarSectionOrder = "sidebarSectionOrder",
+  /** When the bilingual translation dot should appear while editing. */
+  BilingualTranslationTrigger = "bilingualTranslationTrigger",
+  /** Whether grammar checking runs while the user writes. */
+  BilingualGrammarChecking = "bilingualGrammarChecking",
+  /** LanguageTool rule level used when grammar checking. */
+  BilingualGrammarLevel = "bilingualGrammarLevel",
+  /** LanguageTool rule ids the user chose to ignore. */
+  BilingualGrammarIgnoredRules = "bilingualGrammarIgnoredRules",
+  /** Whether opening the bilingual view translates document content automatically. */
+  BilingualAutoTranslate = "bilingualAutoTranslate",
 }
 
 /** Styles of prefix that can be shown before headings. */
@@ -82,4 +92,9 @@ export type UserPreferences = {
   [UserPreference.ShowDocumentStats]?: boolean;
   [UserPreference.NotificationBadge]?: NotificationBadgeType;
   [UserPreference.SidebarSectionOrder]?: SidebarSection[];
+  [UserPreference.BilingualTranslationTrigger]?: "dot" | "hover" | "off";
+  [UserPreference.BilingualGrammarChecking]?: boolean;
+  [UserPreference.BilingualGrammarLevel]?: "default" | "picky";
+  [UserPreference.BilingualGrammarIgnoredRules]?: string[];
+  [UserPreference.BilingualAutoTranslate]?: boolean;
 };

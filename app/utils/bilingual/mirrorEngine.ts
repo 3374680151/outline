@@ -1,8 +1,9 @@
-import { observable, runInAction } from "mobx";
+import { makeObservable, observable, runInAction } from "mobx";
 import type { EditorView } from "prosemirror-view";
 import type { BilingualBlockState } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import Logger from "~/utils/Logger";
+import { autoTranslateOnOpen } from "./prefs";
 import { textHash } from "./hash";
 import { canAutoWrite, reduceBlockState } from "./statusMachine";
 import { applyBlockOps, diffTopLevelBlocks } from "./blockDiff";
@@ -31,6 +32,12 @@ const WRITE_RETRY_MS = 3000;
 
 /** Maximum blocks translated in one batch. */
 const MAX_TRANSLATE_BATCH = 20;
+
+/** Maximum rounds of the post-mount sync probe. */
+const MAX_SYNC_PROBES = 10;
+
+/** Consecutive stable probe rounds before the probe stops early. */
+const STABLE_PROBE_ROUNDS = 2;
 
 /** Block types whose content the engine can fill with translated text. */
 const MIRRORABLE_TYPES = new Set(["paragraph", "heading"]);
@@ -109,15 +116,38 @@ export class MirrorEngine {
   /** Translation states, index parallel with source top-level blocks. */
   blockStates: BilingualBlockState[] = [];
 
+  constructor() {
+    makeObservable(this);
+  }
+
   /** Whether source and target structures disagree (shows a repair banner). */
   @observable
   hasMismatch = false;
+
+  /** Aggregate translation progress for the toolbar, updated via actions. */
+  @observable
+  progress = { translated: 0, total: 0 };
 
   /** Set of block indexes whose mirror content was written by a human. */
   private humanEdited = new Set<number>();
 
   /** Set of block indexes queued for a forced (guard-bypassing) rewrite. */
   private forced = new Set<number>();
+
+  /** Block indexes known to be in or near the viewport, for lazy translation. */
+  private visibleBlocks = new Set<number>();
+
+  /** Block indexes changed since the last successful persist. */
+  private dirty = new Set<number>();
+
+  /** Whether the state array was structurally rebuilt and must persist fully. */
+  private dirtyAll = false;
+
+  /** Timestamp of the last remote (Yjs sync) transaction on either editor. */
+  private lastRemoteAt = 0;
+
+  /** Deferred heal timer for content drift. */
+  private healTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Translations that succeeded but could not be written to the target yet. */
   private pendingWrites = new Map<
@@ -164,8 +194,9 @@ export class MirrorEngine {
     this.lastSignatures = viewBlockSignatures(view);
     this.lastTextHashes = viewBlockTextHashes(view, textHash);
     this.alignBlockStatesLength();
-    // Queue pre-existing content for its first translation (enabling
-    // bilingual mode on a document that already has text).
+    this.updateProgress();
+    // Queue content for its first translation (enabling bilingual mode on a
+    // document that already has text).
     this.queueUntranslatedBlocks();
     this.scheduleConsistencyCheck();
     this.startSyncProbe();
@@ -185,6 +216,38 @@ export class MirrorEngine {
     this.ensureTargetStructure();
     this.queueUntranslatedBlocks();
     this.scheduleConsistencyCheck();
+  }
+
+  /**
+   * Adopts editor views that registered before the pair resolved. Editors
+   * mount through the standard document scene and may beat the pair lookup;
+   * their views are parked in the BilingualStore until here.
+   *
+   * @param source The source editor view, when mounted.
+   * @param target The target editor view, when mounted.
+   */
+  adoptViews(source?: EditorView, target?: EditorView) {
+    if (source) {
+      this.registerSource(source);
+    }
+
+    if (target) {
+      this.registerTarget(target);
+    }
+  }
+
+  /**
+   * Records source blocks that entered the viewport, so translation work can
+   * prioritize (or restrict itself to) visible content.
+   *
+   * @param indexes The block indexes that became visible.
+   */
+  markBlocksVisible(indexes: number[]) {
+    for (const index of indexes) {
+      this.visibleBlocks.add(index);
+    }
+
+    this.queueUntranslatedBlocks();
   }
 
   /**
@@ -222,6 +285,11 @@ export class MirrorEngine {
       clearTimeout(this.syncProbeTimer);
       this.syncProbeTimer = null;
     }
+
+    if (this.healTimer) {
+      clearTimeout(this.healTimer);
+      this.healTimer = null;
+    }
   }
 
   /**
@@ -256,17 +324,21 @@ export class MirrorEngine {
       return;
     }
 
+    this.lastRemoteAt = Date.now();
     this.lastSignatures = viewBlockSignatures(this.sourceView);
     this.lastTextHashes = viewBlockTextHashes(this.sourceView, textHash);
     this.alignBlockStatesLength();
     this.ensureTargetStructure();
+    this.updateProgress();
+    this.checkConsistency();
     this.queueUntranslatedBlocks();
   };
 
   /**
-   * Polls briefly for content that reaches the editor through Yjs sync
+   * Probes briefly for content that reaches the editor through Yjs sync
    * without observable transactions (initial restore), which would otherwise
-   * never run through the remote transaction path.
+   * never run through the remote transaction path. The probe stops early
+   * once the structure has been stable for two consecutive rounds.
    */
   private startSyncProbe() {
     if (this.syncProbeTimer) {
@@ -274,6 +346,9 @@ export class MirrorEngine {
     }
 
     let probes = 0;
+    let stableRounds = 0;
+    let lastSeen: string | null = null;
+
     const probe = () => {
       if (this.destroyed || !this.sourceView) {
         return;
@@ -282,22 +357,28 @@ export class MirrorEngine {
       const signatures = JSON.stringify(viewBlockSignatures(this.sourceView));
 
       if (signatures !== JSON.stringify(this.lastSignatures)) {
+        stableRounds = 0;
         this.handleRemoteTransactions();
-      }
-      // Also cover the case where the source content was already present but
-      // the target document (which loads independently) has not caught up.
-      else if (this.targetView) {
+      } else {
+        // The source content is already present but the target document
+        // (which loads independently) may not have caught up yet.
+        stableRounds =
+          lastSeen !== null && lastSeen === signatures
+            ? stableRounds + 1
+            : stableRounds;
         this.ensureTargetStructure();
         this.queueUntranslatedBlocks();
       }
 
+      lastSeen = signatures;
       probes++;
 
-      if (probes < 15) {
-        this.syncProbeTimer = setTimeout(probe, 1000);
-      } else {
+      if (stableRounds >= STABLE_PROBE_ROUNDS || probes >= MAX_SYNC_PROBES) {
         this.syncProbeTimer = null;
+        return;
       }
+
+      this.syncProbeTimer = setTimeout(probe, 1000);
     };
 
     this.syncProbeTimer = setTimeout(probe, 1000);
@@ -336,6 +417,8 @@ export class MirrorEngine {
     );
     this.humanEdited = remapIndexSet(this.humanEdited, ops, oldSize);
     this.forced = remapIndexSet(this.forced, ops, oldSize);
+    this.dirtyAll = true;
+    this.updateProgress();
     // Text hash refresh is intentionally left to detectTextChanges, which
     // runs right after and queues the newly inserted or shifted blocks.
     this.schedulePersist();
@@ -457,6 +540,7 @@ export class MirrorEngine {
       });
 
       this.blockStates[i] = nextState;
+      this.markDirty(i);
 
       if (nextState.status === "empty" && translatable) {
         this.translateQueue.add(i);
@@ -466,6 +550,7 @@ export class MirrorEngine {
 
     this.lastTextHashes = hashes;
     this.alignBlockStatesLength();
+    this.updateProgress();
 
     if (queued) {
       this.scheduleTranslate();
@@ -519,19 +604,33 @@ export class MirrorEngine {
       batch.forEach((item) => this.forced.delete(item.index));
       const translatable = batch.filter((item) => item.text.trim().length > 0);
 
-      this.blockStates = this.blockStates.map((state, i) => {
-        const item = batch.find((entry) => entry.index === i);
-
-        return item && translatable.includes(item)
-          ? reduceBlockState(state, false, {
-              type: "translationStarted",
-              sourceHash: item.hash,
-            })
-          : state;
-      });
+      for (const item of translatable) {
+        const state = this.blockStates[item.index] ?? emptyState();
+        this.blockStates[item.index] = reduceBlockState(state, false, {
+          type: "translationStarted",
+          sourceHash: item.hash,
+        });
+        this.markDirty(item.index);
+      }
       this.schedulePersist();
 
       if (translatable.length > 0) {
+        // A misaligned mirror would put translations into the wrong blocks;
+        // realign first (safe while the mirror is untouched) or hold off.
+        this.checkConsistency();
+
+        if (this.hasMismatch) {
+          this.repair();
+
+          if (this.hasMismatch) {
+            for (const item of translatable) {
+              this.translateQueue.add(item.index);
+            }
+            this.scheduleTranslate();
+            return;
+          }
+        }
+
         let results: string[];
 
         try {
@@ -540,14 +639,19 @@ export class MirrorEngine {
           );
         } catch (err) {
           Logger.warn("bilingual translate failed", { err });
-          this.blockStates = this.blockStates.map((state, i) =>
-            translatable.some((item) => item.index === i)
-              ? reduceBlockState(state, this.humanEdited.has(i), {
-                  type: "translationFailed",
-                  message: "translation failed",
-                })
-              : state
-          );
+          for (const item of translatable) {
+            const state = this.blockStates[item.index] ?? emptyState();
+            this.blockStates[item.index] = reduceBlockState(
+              state,
+              this.humanEdited.has(item.index),
+              {
+                type: "translationFailed",
+                message: "translation failed",
+              }
+            );
+            this.markDirty(item.index);
+          }
+          this.updateProgress();
           this.schedulePersist();
           return;
         }
@@ -569,6 +673,7 @@ export class MirrorEngine {
             sourceHash: item.hash,
             autoText: translated,
           });
+          this.markDirty(item.index);
           this.humanEdited.delete(item.index);
           const written = this.writeTarget(
             item.index,
@@ -590,6 +695,8 @@ export class MirrorEngine {
           }
         }
 
+        this.updateProgress();
+        this.checkConsistency();
         this.schedulePersist();
       }
     }
@@ -642,10 +749,20 @@ export class MirrorEngine {
         true,
         { type: "targetManuallyEdited" }
       );
+      this.markDirty(index);
+      this.updateProgress();
       return true;
     }
 
-    return replaceBlockText(targetView, index, text);
+    const written = replaceBlockText(targetView, index, text);
+
+    // Verify the content landed where intended; an index race between the
+    // batch build and the write would otherwise corrupt the mirror silently.
+    if (written && blockText(targetView, index) !== text) {
+      return false;
+    }
+
+    return written;
   }
 
   /**
@@ -673,6 +790,8 @@ export class MirrorEngine {
       false,
       { type: "translationSucceeded", sourceHash, autoText: text }
     );
+    this.markDirty(index);
+    this.updateProgress();
     this.schedulePersist();
   }
 
@@ -727,6 +846,8 @@ export class MirrorEngine {
         true,
         { type: "targetManuallyEdited" }
       );
+      this.markDirty(index);
+      this.updateProgress();
     }
   }
 
@@ -741,10 +862,57 @@ export class MirrorEngine {
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null;
 
-      if (this.pairId) {
-        void BilingualStore.updateState(this.pairId, [...this.blockStates]);
+      if (!this.pairId) {
+        return;
       }
+
+      const dirty = this.dirty;
+      const all = this.dirtyAll;
+      this.dirty = new Set();
+      this.dirtyAll = false;
+      void BilingualStore.updateState(
+        this.pairId,
+        [...this.blockStates],
+        !all && dirty.size > 0 && dirty.size < this.blockStates.length
+          ? dirty
+          : undefined
+      );
     }, PERSIST_DEBOUNCE_MS);
+  }
+
+  /**
+   * Records a block index whose state changed since the last persist.
+   *
+   * @param index The block index.
+   */
+  private markDirty(index: number) {
+    this.dirty.add(index);
+  }
+
+  /**
+   * Recomputes the aggregate translation progress shown in the toolbar.
+   */
+  private updateProgress() {
+    const sourceView = this.sourceView;
+    let total = 0;
+    let translated = 0;
+
+    sourceView?.state.doc.forEach((node, _offset, index) => {
+      if (!isTextReplaceable(node) || node.textContent.trim().length === 0) {
+        return;
+      }
+
+      total++;
+      const state = this.blockStates[index] ?? emptyState();
+
+      if (state.autoText || state.status === "manual") {
+        translated++;
+      }
+    });
+
+    runInAction(() => {
+      this.progress = { translated, total };
+    });
   }
 
   /**
@@ -762,9 +930,11 @@ export class MirrorEngine {
   }
 
   /**
-   * Compares source and target block signatures and sets the mismatch flag.
-   * Only mirrorable block types participate: types the engine mirrors as
-   * placeholders (lists, tables, …) are equal on both sides by construction.
+   * Compares source and target block signatures plus the placement of the
+   * engine's own translations, and sets the mismatch flag. Structure alone
+   * cannot detect translations that landed in the wrong slot; content drift
+   * (an auto block whose mirror text no longer matches the engine's record)
+   * is checked block by block.
    */
   checkConsistency() {
     const sourceView = this.sourceView;
@@ -774,11 +944,51 @@ export class MirrorEngine {
       return;
     }
 
+    const structuralMismatch =
+      mirrorableKey(viewBlockSignatures(sourceView)) !==
+      mirrorableKey(viewBlockSignatures(targetView));
+
+    let contentDrift = 0;
+
+    if (!structuralMismatch) {
+      sourceView.state.doc.forEach((node, _offset, index) => {
+        const state = this.blockStates[index];
+
+        if (!state || state.status !== "auto" || !state.autoText) {
+          return;
+        }
+
+        const targetNode =
+          index < targetView.state.doc.childCount
+            ? targetView.state.doc.child(index)
+            : undefined;
+
+        if (!targetNode || targetNode.textContent !== state.autoText) {
+          contentDrift++;
+        }
+      });
+    }
+
     runInAction(() => {
-      this.hasMismatch =
-        mirrorableKey(viewBlockSignatures(sourceView)) !==
-        mirrorableKey(viewBlockSignatures(targetView));
+      this.hasMismatch = structuralMismatch || contentDrift > 0;
     });
+
+    // Content-only drift affects blocks the engine owns (auto states), so it
+    // can be healed in place. Deferred so a consistency check that runs
+    // inside a ProseMirror update never dispatches a nested transaction.
+    if (!structuralMismatch && contentDrift > 0 && !this.healTimer) {
+      this.healTimer = setTimeout(() => {
+        this.healTimer = null;
+
+        if (this.destroyed) {
+          return;
+        }
+
+        this.rewriteDriftedBlocks();
+        this.checkConsistency();
+        this.schedulePersist();
+      }, 50);
+    }
   }
 
   /**
@@ -799,6 +1009,15 @@ export class MirrorEngine {
       mirrorableKey(viewBlockSignatures(sourceView)) ===
       mirrorableKey(viewBlockSignatures(targetView))
     ) {
+      return;
+    }
+
+    // During the initial Yjs sync the source document arrives in chunks;
+    // diffing against a partially synced document inserts structural garbage
+    // that later misaligns every translation. Wait until the sync stream has
+    // been quiet for a moment before aligning.
+    if (Date.now() - this.lastRemoteAt < 1500) {
+      this.scheduleConsistencyCheck();
       return;
     }
 
@@ -826,6 +1045,8 @@ export class MirrorEngine {
     );
     this.humanEdited = remapIndexSet(this.humanEdited, ops, oldSize);
     this.forced = remapIndexSet(this.forced, ops, oldSize);
+    this.dirtyAll = true;
+    this.updateProgress();
     this.checkConsistency();
   }
 
@@ -857,12 +1078,46 @@ export class MirrorEngine {
     );
     this.humanEdited = remapIndexSet(this.humanEdited, ops, oldSize);
     this.forced = remapIndexSet(this.forced, ops, oldSize);
+    this.dirtyAll = true;
+    this.rewriteDriftedBlocks();
+    this.updateProgress();
     this.checkConsistency();
     this.schedulePersist();
   }
 
   /**
-   * Queues every block that has text but has never been translated.
+   * Rewrites auto-translated blocks whose mirror content no longer matches
+   * the engine's record, healing translations that landed in the wrong slot.
+   * Human-edited blocks keep their content.
+   */
+  private rewriteDriftedBlocks() {
+    const targetView = this.targetView;
+
+    if (!targetView) {
+      return;
+    }
+
+    this.blockStates.forEach((state, index) => {
+      if (state.status !== "auto" || !state.autoText) {
+        return;
+      }
+
+      const targetNode =
+        index < targetView.state.doc.childCount
+          ? targetView.state.doc.child(index)
+          : undefined;
+
+      if (targetNode && targetNode.textContent !== state.autoText) {
+        replaceBlockText(targetView, index, state.autoText);
+      }
+    });
+  }
+
+  /**
+   * Queues blocks that have text but have never been translated. Visible
+   * blocks are queued first so the content the user is reading appears
+   * first; when automatic translation is disabled only visible blocks are
+   * translated at all.
    */
   private queueUntranslatedBlocks() {
     const sourceView = this.sourceView;
@@ -870,6 +1125,8 @@ export class MirrorEngine {
     if (!sourceView) {
       return;
     }
+
+    const candidates: number[] = [];
 
     sourceView.state.doc.forEach((node, _offset, index) => {
       const state = this.blockStates[index] ?? emptyState();
@@ -880,9 +1137,26 @@ export class MirrorEngine {
         state.status === "empty" &&
         !state.sourceHash
       ) {
-        this.translateQueue.add(index);
+        candidates.push(index);
       }
     });
+
+    const visible = candidates.filter((index) =>
+      this.visibleBlocks.size === 0 ? true : this.visibleBlocks.has(index)
+    );
+    const hidden = this.visibleBlocks.size
+      ? candidates.filter((index) => !this.visibleBlocks.has(index))
+      : [];
+
+    const ordered = [...visible, ...hidden];
+    const queued =
+      autoTranslateOnOpen() || this.translateQueue.size > 0
+        ? ordered
+        : visible;
+
+    for (const index of queued) {
+      this.translateQueue.add(index);
+    }
 
     if (this.translateQueue.size > 0) {
       this.scheduleTranslate();
@@ -947,7 +1221,10 @@ export class MirrorEngine {
   }
 
   /**
-   * Pads or trims the block state array to match the source block count.
+   * Pads the block state array to the source block count. The array is never
+   * truncated here: during the initial Yjs sync the source document may hold
+   * only part of its content, and dropping state for blocks that have not
+   * arrived yet would destroy persisted translations.
    */
   private alignBlockStatesLength() {
     const sourceView = this.sourceView;
@@ -960,10 +1237,6 @@ export class MirrorEngine {
 
     while (this.blockStates.length < count) {
       this.blockStates.push(emptyState());
-    }
-
-    if (this.blockStates.length > count) {
-      this.blockStates.length = count;
     }
   }
 }

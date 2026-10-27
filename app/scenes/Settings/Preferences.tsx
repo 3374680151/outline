@@ -100,6 +100,24 @@ function Preferences() {
     [user, t]
   );
 
+  const handleBilingualTriggerChange = React.useCallback(
+    async (value: "off" | "dot" | "hover") => {
+      user.setPreference(UserPreference.BilingualTranslationTrigger, value);
+      await user.save();
+      toast.success(t("Preferences saved"));
+    },
+    [user, t]
+  );
+
+  const handleBilingualGrammarChange = React.useCallback(
+    async (checked: boolean) => {
+      user.setPreference(UserPreference.BilingualGrammarChecking, checked);
+      await user.save();
+      toast.success(t("Preferences saved"));
+    },
+    [user, t]
+  );
+
   const handleRememberLastPathChange = React.useCallback(
     async (checked: boolean) => {
       user.setPreference(UserPreference.RememberLastPath, checked);
@@ -276,6 +294,43 @@ function Preferences() {
           name={UserPreference.ShowDocumentStats}
           checked={user.getPreference(UserPreference.ShowDocumentStats)}
           onChange={handleShowDocumentStatsChange}
+        />
+      </SettingRow>
+
+      <Heading as="h2">{t("Bilingual writing")}</Heading>
+      <SettingRow
+        name={UserPreference.BilingualTranslationTrigger}
+        label={t("Translation trigger")}
+        description={t(
+          "How the translate action appears while reading English documents. Hover translates words as the pointer passes over them."
+        )}
+        border
+      >
+        <InputSelect
+          value={user.getPreference(UserPreference.BilingualTranslationTrigger)}
+          options={[
+            { type: "item", label: t("Off"), value: "off" },
+            { type: "item", label: t("Dot next to selection"), value: "dot" },
+            { type: "item", label: t("Hover words"), value: "hover" },
+          ] satisfies Option[]}
+          onChange={handleBilingualTriggerChange}
+          label={t("Translation trigger")}
+          labelHidden
+        />
+      </SettingRow>
+      <SettingRow
+        name={UserPreference.BilingualGrammarChecking}
+        label={t("Grammar checking")}
+        description={t(
+          "Underline spelling and grammar issues in English documents as you write. Click an underline to fix or ignore the issue."
+        )}
+        border={false}
+      >
+        <Switch
+          id={UserPreference.BilingualGrammarChecking}
+          name={UserPreference.BilingualGrammarChecking}
+          checked={user.getPreference(UserPreference.BilingualGrammarChecking)}
+          onChange={handleBilingualGrammarChange}
         />
       </SettingRow>
 

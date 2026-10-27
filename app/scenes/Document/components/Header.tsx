@@ -12,6 +12,9 @@ import { altDisplay, metaDisplay } from "@shared/utils/keyboard";
 import { publishDocument } from "~/actions/definitions/documents";
 import { restoreRevision } from "~/actions/definitions/revisions";
 import { Action } from "~/components/Actions";
+import { BilingualToolbar } from "~/components/BilingualToolbar";
+import { useBilingualPair } from "~/components/BilingualPairProvider";
+import { useSplitView } from "~/components/SplitView/context";
 import Badge from "~/components/Badge";
 import Button from "~/components/Button";
 import Collaborators from "~/components/Collaborators";
@@ -110,6 +113,8 @@ function DocumentHeader({
   const { isDeleted } = document;
   const canToggleEmbeds = team?.documentEmbeds;
   const showContents = ui.tocVisible === true;
+  const bilingual = useBilingualPair();
+  const { pane } = useSplitView();
 
   const toc = (
     <Tooltip
@@ -197,6 +202,13 @@ function DocumentHeader({
         <>
           <ObservingBanner />
           <SearchHighlightChip />
+          {bilingual.active &&
+            bilingual.pair?.sourceDocumentId === document.id &&
+            pane === "primary" && (
+              <Action>
+                <BilingualToolbar document={document} />
+              </Action>
+            )}
           {!isDeleted && !isRevision && can.listViews && (
             <Collaborators
               document={document}

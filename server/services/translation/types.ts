@@ -25,6 +25,28 @@ export interface TranslationResult {
   detectedFrom?: string;
 }
 
+/**
+ * Workspace level credential override for one provider, loaded from the
+ * encrypted TeamAiConfig rows. When a field is unset the provider falls back
+ * to its environment variable.
+ */
+export interface TeamProviderConfig {
+  /** Base URL override, when the provider accepts one. */
+  baseUrl?: string | null;
+  /** API key override, encrypted at rest. */
+  apiKey?: string | null;
+  /** Model name override, when the provider uses models. */
+  model?: string | null;
+}
+
+/** The AI service configuration of one workspace. */
+export interface TeamTranslationConfig {
+  /** Per-provider overrides by provider id. */
+  configs: Map<string, TeamProviderConfig>;
+  /** The provider the workspace marked as its preferred one, if any. */
+  defaultProviderId?: string | null;
+}
+
 /** A single translation service. */
 export interface TranslationProvider {
   /** Stable provider identifier used in settings and the API. */
@@ -36,15 +58,20 @@ export interface TranslationProvider {
   /**
    * Whether the provider has the credentials it needs.
    *
+   * @param config Workspace level credential override, when present.
    * @returns True when the provider can be used.
    */
-  isConfigured(): boolean;
+  isConfigured(config?: TeamProviderConfig | null): boolean;
   /**
    * Translates a batch of texts.
    *
    * @param req The translation request.
+   * @param config Workspace level credential override, when present.
    * @returns The translation result.
    * @throws Error when the upstream service fails.
    */
-  translate(req: TranslationRequest): Promise<TranslationResult>;
+  translate(
+    req: TranslationRequest,
+    config?: TeamProviderConfig | null
+  ): Promise<TranslationResult>;
 }

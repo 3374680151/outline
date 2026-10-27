@@ -15,6 +15,7 @@ import {
   translateWithFallback,
 } from "@server/services/translation/registry";
 import { lookupWordWithAI } from "@server/services/translation/providers/openaiCompatible";
+import { loadTeamTranslationConfig } from "@server/services/translation/teamConfig";
 import * as T from "./schema";
 
 const router = new Router();
@@ -55,9 +56,12 @@ router.post(
   rateLimiter(RateLimiterStrategy.OneHundredPerMinute),
   validate(T.TranslationsProvidersSchema),
   async (ctx: APIContext<T.TranslationsProvidersReq>) => {
+    const { user } = ctx.state.auth;
+    const team = await loadTeamTranslationConfig(user.teamId);
+
     ctx.body = {
       data: {
-        providers: listProviders(),
+        providers: listProviders(team),
       },
     };
   }
@@ -71,6 +75,7 @@ router.post(
   async (ctx: APIContext<T.TranslationsTranslateReq>) => {
     const { text, texts: bodyTexts, from, to, provider: providerId } =
       ctx.input.body;
+    const { user } = ctx.state.auth;
 
     const input = bodyTexts ?? (text !== undefined ? [text] : []);
 
@@ -78,7 +83,8 @@ router.post(
       throw InvalidRequestError("Either text or texts is required");
     }
 
-    const provider = getConfiguredProvider(providerId);
+    const team = await loadTeamTranslationConfig(user.teamId);
+    const provider = getConfiguredProvider(providerId, team);
 
     if (providerId && !provider) {
       throw InvalidRequestError(
@@ -117,17 +123,21 @@ router.post(
 
       try {
         const translated = provider
-          ? await provider.translate({
-              texts: misses.map((miss) => miss.text),
-              from,
-              to,
-              signal: controller.signal,
-            })
+          ? await provider.translate(
+              {
+                texts: misses.map((miss) => miss.text),
+                from,
+                to,
+                signal: controller.signal,
+              },
+              team.configs.get(provider.id)
+            )
           : await translateWithFallback(
               misses.map((miss) => miss.text),
               from,
               to,
-              controller.signal
+              controller.signal,
+              team
             );
 
         await Promise.all(
@@ -168,6 +178,7 @@ router.post(
   validate(T.TranslationsWordSchema),
   async (ctx: APIContext<T.TranslationsWordReq>) => {
     const { word, context, to } = ctx.input.body;
+    const { user } = ctx.state.auth;
     const cacheKey = `word-lookup:${to}:${createHash("sha256")
       .update(`${word}|${context ?? ""}`)
       .digest("hex")}`;
@@ -182,7 +193,13 @@ router.post(
     let result: Record<string, unknown> | undefined;
 
     try {
-      const entry = await lookupWordWithAI(word, context, new AbortController().signal);
+      const team = await loadTeamTranslationConfig(user.teamId);
+      const entry = await lookupWordWithAI(
+        word,
+        context,
+        new AbortController().signal,
+        team.configs.get("openai-compatible")
+      );
 
       if (entry) {
         result = { available: true, entry };

@@ -48,6 +48,7 @@ import {
   DocumentPreference,
   ExportContentType,
   HeadingPrefixStyle,
+  TeamPreference,
   UserPreference,
 } from "@shared/types";
 import { isMobile } from "@shared/utils/browser";
@@ -88,7 +89,6 @@ import {
   TrashSection,
 } from "~/actions/sections";
 import { setPersistedState } from "~/hooks/usePersistedState";
-import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
 import {
   documentHistoryPath,
@@ -103,7 +103,8 @@ import {
   trashPath,
   documentEditPath,
 } from "~/utils/routeHelpers";
-import { getFocusedSplitPane, openRouteInSplit } from "~/utils/splitView";
+import { getFocusedSplitPane, openBilingualRoute, openRouteInSplit } from "~/utils/splitView";
+import { ensureBilingualPair } from "~/components/BilingualPairProvider";
 import { recentDocuments } from "~/components/CommandBar/useRecentDocumentActions";
 import { documentBreadcrumbText } from "~/components/DocumentBreadcrumb";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
@@ -958,26 +959,23 @@ export const openBilingualEditor = createAction({
   icon: <GlobeIcon />,
   keywords: "translate chinese bilingual english 中文 翻译",
   visible: ({ activeDocumentId, stores }) =>
-    !!activeDocumentId && stores.policies.abilities(activeDocumentId).update,
+    !!activeDocumentId &&
+    stores.policies.abilities(activeDocumentId).update &&
+    (stores.auth.team?.getPreference(TeamPreference.BilingualEditor) ?? true) &&
+    !isMobile(),
   perform: async ({ activeDocumentId, t }) => {
     if (!activeDocumentId) {
       return;
     }
 
-    try {
-      await BilingualStore.createPair({ documentId: activeDocumentId });
-    } catch (_err) {
-      // Most likely the document is already part of a pair; continue to
-      // open whatever pair exists below.
-    }
+    const paths = await ensureBilingualPair(activeDocumentId);
 
-    const info = await BilingualStore.fetchInfo(activeDocumentId);
-
-    if (info.pair) {
-      history.push(`/doc/${info.pair.sourceDocumentId}/bilingual`);
-    } else {
+    if (!paths) {
       toast.message(t("Bilingual editing is unavailable for this document"));
+      return;
     }
+
+    openBilingualRoute(history, paths.primaryPath, paths.secondaryPath);
   },
 });
 
