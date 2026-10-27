@@ -14,67 +14,33 @@ const CSS = `
   text-decoration-style: wavy;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .bilingual-grammar-typo {
   text-decoration-color: #dc2626;
+  background: rgba(220, 38, 38, 0.07);
 }
 
 .bilingual-grammar-grammar {
   text-decoration-color: #d97706;
+  background: rgba(217, 119, 6, 0.07);
 }
 
 .bilingual-grammar-punct {
   text-decoration-color: #2563eb;
+  background: rgba(37, 99, 235, 0.07);
 }
 
 .bilingual-grammar-style {
   text-decoration-color: #7c3aed;
   text-decoration-style: dotted;
+  background: rgba(124, 58, 237, 0.07);
 }
 
 .bilingual-grammar-other {
   text-decoration-color: #64748b;
-}
-
-.bilingual-issue-dots {
-  display: inline-flex;
-  gap: 5px;
-  margin-left: 8px;
-  vertical-align: middle;
-  pointer-events: auto;
-}
-
-.bilingual-issue-dot {
-  width: 8px;
-  height: 8px;
-  min-width: 8px;
-  min-height: 8px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  box-shadow: 0 0 0 2px rgba(128, 128, 128, 0.15);
-}
-
-.bilingual-issue-dot.bilingual-grammar-typo {
-  background: #dc2626;
-}
-
-.bilingual-issue-dot.bilingual-grammar-grammar {
-  background: #d97706;
-}
-
-.bilingual-issue-dot.bilingual-grammar-punct {
-  background: #2563eb;
-}
-
-.bilingual-issue-dot.bilingual-grammar-style {
-  background: #7c3aed;
-}
-
-.bilingual-issue-dot.bilingual-grammar-other {
-  background: #64748b;
+  background: rgba(100, 116, 139, 0.07);
 }
 `;
 

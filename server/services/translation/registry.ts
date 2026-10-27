@@ -1,6 +1,11 @@
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
-import type { TranslationProvider, TranslationRequest, TranslationResult } from "./types";
+import type {
+  TeamTranslationConfig,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+} from "./types";
 import deepl from "./providers/deepl";
 import microsoftFree from "./providers/microsoftFree";
 import openaiCompatible from "./providers/openaiCompatible";
@@ -21,18 +26,25 @@ const COOLDOWN_MS = 60000;
 /**
  * Returns the providers in the configured order that currently have
  * credentials, skipping providers in their failure cooldown unless all of
- * them are cooling down.
+ * them are cooling down. The workspace's preferred provider is tried first.
  *
+ * @param team The workspace AI configuration, when available.
  * @returns The candidate providers for a translation attempt.
  */
-function candidates(): TranslationProvider[] {
+function candidates(
+  team?: TeamTranslationConfig | null
+): TranslationProvider[] {
   const order = env.TRANSLATION_PROVIDER_ORDER.split(",")
     .map((id) => id.trim())
     .filter(Boolean);
 
-  const configured = order
+  const ids = team?.defaultProviderId
+    ? [team.defaultProviderId, ...order.filter((id) => id !== team.defaultProviderId)]
+    : order;
+
+  const configured = ids
     .map((id) => PROVIDERS[id])
-    .filter((provider) => provider?.isConfigured());
+    .filter((provider) => provider?.isConfigured(team?.configs.get(provider.id)));
 
   const now = Date.now();
   const ready = configured.filter(
@@ -53,6 +65,7 @@ function candidates(): TranslationProvider[] {
  * @param from Optional source language hint.
  * @param to The target language.
  * @param signal Signal to abort the attempt.
+ * @param team The workspace AI configuration, when available.
  * @returns The translation result from the first successful provider.
  * @throws Error when every provider fails.
  */
@@ -60,24 +73,30 @@ export async function translateWithFallback(
   texts: string[],
   from: string | undefined,
   to: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  team?: TeamTranslationConfig | null
 ): Promise<TranslationResult> {
-  const providers = candidates();
+  const providers = candidates(team);
   let lastError: Error | undefined;
 
   for (const provider of providers) {
+    const config = team?.configs.get(provider.id);
+
     try {
       const results: string[] = [];
       let detectedFrom: string | undefined;
 
       for (let i = 0; i < texts.length; i += provider.maxBatch) {
         const chunk = texts.slice(i, i + provider.maxBatch);
-        const result = await provider.translate({
-          texts: chunk,
-          from,
-          to,
-          signal,
-        });
+        const result = await provider.translate(
+          {
+            texts: chunk,
+            from,
+            to,
+            signal,
+          },
+          config
+        );
         results.push(...result.results);
         detectedFrom = detectedFrom ?? result.detectedFrom;
       }
@@ -98,17 +117,20 @@ export async function translateWithFallback(
  * Lists the configured providers for the settings UI. No credentials are
  * exposed, only availability.
  *
+ * @param team The workspace AI configuration, when available.
  * @returns Provider descriptors in fallback order.
  */
-export function listProviders(): {
+export function listProviders(team?: TeamTranslationConfig | null): {
   id: string;
   label: string;
   configured: boolean;
+  isDefault: boolean;
 }[] {
   return Object.values(PROVIDERS).map((provider) => ({
     id: provider.id,
     label: provider.label,
-    configured: provider.isConfigured(),
+    configured: provider.isConfigured(team?.configs.get(provider.id)),
+    isDefault: team?.defaultProviderId === provider.id,
   }));
 }
 
@@ -116,17 +138,26 @@ export function listProviders(): {
  * Resolves a specific provider by id, when configured.
  *
  * @param id The provider id.
+ * @param team The workspace AI configuration, when available.
  * @returns The provider, or undefined when unknown or unconfigured.
  */
 export function getConfiguredProvider(
-  id: string | undefined
+  id: string | undefined,
+  team?: TeamTranslationConfig | null
 ): TranslationProvider | undefined {
   if (!id) {
     return undefined;
   }
 
   const provider = PROVIDERS[id];
-  return provider?.isConfigured() ? provider : undefined;
+  return provider?.isConfigured(team?.configs.get(provider.id))
+    ? provider
+    : undefined;
 }
 
-export type { TranslationProvider, TranslationRequest, TranslationResult };
+export type {
+  TeamTranslationConfig,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+};

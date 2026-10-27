@@ -4,28 +4,36 @@ import Extension from "@shared/editor/lib/Extension";
 import BilingualStore from "~/stores/BilingualStore";
 import { MIRROR_WRITE_META } from "~/utils/bilingual/editorBlocks";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
+import { observeBlockVisibility } from "~/utils/bilingual/visibility";
+
+/** Live bilingual state of the host editor, resolved at event time. */
+export interface BilingualMirrorState {
+  /** Which side of the active pair this editor is, if any. */
+  side: "source" | "target" | undefined;
+  /** The mirror engine while the bilingual view is active. */
+  engine: MirrorEngine | null;
+}
 
 /**
  * Options for the bilingual mirror extension.
  */
 interface BilingualMirrorOptions {
-  /** The mirror engine driving the synchronization. */
-  engine: MirrorEngine;
-  /** Which pane of the pair this editor instance is. */
-  side: "source" | "target";
+  /** Resolves the live bilingual state of the host editor. */
+  getState: () => BilingualMirrorState;
 }
 
 /**
- * Bridges a ProseMirror editor instance and the bilingual MirrorEngine.
- * On the source pane it observes local transactions (remote ones are
- * mirrored by their originating client); on the target pane it tracks human
- * edits and structure consistency.
+ * Bridges a ProseMirror editor instance and the bilingual MirrorEngine. The
+ * extension is installed in every document editor; it only acts when the
+ * bilingual view is active and this document belongs to the open pair. On
+ * the source pane it observes local transactions (remote ones are mirrored
+ * by their originating client); on the target pane it tracks human edits and
+ * structure consistency.
  */
 export default class BilingualMirrorExtension extends Extension<BilingualMirrorOptions> {
   get defaultOptions(): BilingualMirrorOptions {
     return {
-      engine: undefined as unknown as MirrorEngine,
-      side: "source",
+      getState: () => ({ side: undefined, engine: null }),
     };
   }
 
@@ -34,13 +42,14 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
   }
 
   get plugins() {
-    const { engine, side } = this.options;
-    const documentId = this.editor?.props.id as string | undefined;
+    const getState = this.options.getState;
 
     return [
       new Plugin({
-        appendTransaction: (trs, _oldState, _newState) => {
-          if (!trs.some((tr) => tr.docChanged)) {
+        appendTransaction: (trs, _oldState, newState) => {
+          const { side, engine } = getState();
+
+          if (!side || !engine || !trs.some((tr) => tr.docChanged)) {
             return null;
           }
 
@@ -62,8 +71,8 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
             // from future overwrites. Writes dispatched by the engine itself
             // carry the mirror meta and must not be mistaken for edits.
             if (isLocal && !isEngineWrite) {
-              const index = _newState.selection
-                ? _newState.selection.$from.index(0)
+              const index = newState.selection
+                ? newState.selection.$from.index(0)
                 : -1;
 
               if (index >= 0) {
@@ -77,14 +86,39 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
           return null;
         },
         view: (editorView) => {
-          if (side === "source") {
-            engine.registerSource(editorView);
-          } else {
-            engine.registerTarget(editorView);
-          }
+          const documentId = this.editor?.props.id as string | undefined;
 
+          // The view is always registered so the engine can adopt it once a
+          // pair resolves; editors commonly mount before the pair is known.
           if (documentId) {
             BilingualStore.registerEditor(documentId, editorView);
+          }
+
+          const { side, engine } = getState();
+
+          if (side && engine) {
+            if (side === "source") {
+              engine.registerSource(editorView);
+
+              // Feed viewport visibility to the engine so translation work
+              // can prioritize (or restrict itself to) visible content.
+              const visibilityObserver = observeBlockVisibility(
+                editorView,
+                (indexes) => engine.markBlocksVisible(indexes)
+              );
+
+              return {
+                destroy: () => {
+                  visibilityObserver.disconnect();
+
+                  if (documentId) {
+                    BilingualStore.unregisterEditor(documentId);
+                  }
+                },
+              };
+            }
+
+            engine.registerTarget(editorView);
           }
 
           return {

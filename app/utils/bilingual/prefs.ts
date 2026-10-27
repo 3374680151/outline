@@ -1,15 +1,124 @@
+import { observable, runInAction } from "mobx";
+import { UserPreference } from "@shared/types";
+import stores from "~/stores";
+
 /**
- * Client-side preferences for the bilingual module, stored in localStorage
- * until they graduate into workspace preferences. Keys and defaults match
- * the server-side TeamPreference values.
+ * Version counter incremented whenever a bilingual preference changes, so
+ * non-React consumers (editor extensions) can react to toggles without
+ * remounting.
+ */
+export const bilingualPrefsVersion = observable.box(0);
+
+/**
+ * Signals that a bilingual preference changed.
+ */
+function bumpPrefsVersion(): void {
+  runInAction(() => {
+    bilingualPrefsVersion.set(bilingualPrefsVersion.get() + 1);
+  });
+}
+
+/** Debounced persistence so rapid toggles produce one request and no
+ * out-of-order responses that would overwrite newer local values. */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Persists pending preference changes after a short debounce.
+ */
+function scheduleUserSave(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void currentUser()?.save();
+  }, 500);
+}
+
+/**
+ * Bilingual experience preferences. These live in the signed-in user's
+ * server-side preferences so they follow the user across devices; localStorage
+ * values from earlier builds are migrated once and then removed.
  */
 
-const TRIGGER_KEY = "bilingual-translation-trigger";
-const GRAMMAR_ENABLED_KEY = "bilingual-grammar-enabled";
-const GRAMMAR_LEVEL_KEY = "bilingual-grammar-level";
+const LEGACY_TRIGGER_KEY = "bilingual-translation-trigger";
+const LEGACY_GRAMMAR_ENABLED_KEY = "bilingual-grammar-enabled";
+const LEGACY_GRAMMAR_LEVEL_KEY = "bilingual-grammar-level";
+const LEGACY_IGNORED_RULES_KEY = "bilingual-grammar-ignored-rules";
+const MIGRATION_DONE_KEY = "bilingual-prefs-migrated";
 
 /** Valid translation trigger modes. */
 export type TranslationTriggerMode = "off" | "dot" | "hover";
+
+/**
+ * The current user, or undefined before sign-in.
+ *
+ * @returns The user model, when available.
+ */
+function currentUser() {
+  return stores.auth.user;
+}
+
+/**
+ * Moves pre-preference localStorage values into the user's server-side
+ * preferences. Runs at most once per browser profile.
+ */
+export function migrateLegacyPreferences(): void {
+  if (localStorage.getItem(MIGRATION_DONE_KEY)) {
+    return;
+  }
+
+  localStorage.setItem(MIGRATION_DONE_KEY, "1");
+  const user = currentUser();
+
+  if (!user) {
+    return;
+  }
+
+  const trigger = localStorage.getItem(LEGACY_TRIGGER_KEY);
+
+  if (trigger === "off" || trigger === "dot" || trigger === "hover") {
+    user.setPreference(UserPreference.BilingualTranslationTrigger, trigger);
+  }
+
+  const grammar = localStorage.getItem(LEGACY_GRAMMAR_ENABLED_KEY);
+
+  if (grammar === "off") {
+    user.setPreference(UserPreference.BilingualGrammarChecking, false);
+  }
+
+  const level = localStorage.getItem(LEGACY_GRAMMAR_LEVEL_KEY);
+
+  if (level === "picky" || level === "default") {
+    user.setPreference(UserPreference.BilingualGrammarLevel, level);
+  }
+
+  try {
+    const raw = localStorage.getItem(LEGACY_IGNORED_RULES_KEY);
+    const rules = raw ? (JSON.parse(raw) as unknown) : null;
+
+    if (Array.isArray(rules) && rules.length > 0) {
+      user.setPreference(
+        UserPreference.BilingualGrammarIgnoredRules,
+        rules.filter((rule): rule is string => typeof rule === "string")
+      );
+    }
+  } catch (_err) {
+    // Malformed legacy value; ignore it.
+  }
+
+  void user.save();
+
+  for (const key of [
+    LEGACY_TRIGGER_KEY,
+    LEGACY_GRAMMAR_ENABLED_KEY,
+    LEGACY_GRAMMAR_LEVEL_KEY,
+    LEGACY_IGNORED_RULES_KEY,
+  ]) {
+    localStorage.removeItem(key);
+  }
+}
 
 /**
  * Reads the translation trigger mode.
@@ -17,10 +126,9 @@ export type TranslationTriggerMode = "off" | "dot" | "hover";
  * @returns The configured trigger mode, "dot" by default.
  */
 export function translationTrigger(): TranslationTriggerMode {
-  const value = localStorage.getItem(TRIGGER_KEY);
-  return value === "off" || value === "hover" || value === "dot"
-    ? value
-    : "dot";
+  const user = currentUser();
+  return (user?.getPreference(UserPreference.BilingualTranslationTrigger) ??
+    "dot") as TranslationTriggerMode;
 }
 
 /**
@@ -29,16 +137,21 @@ export function translationTrigger(): TranslationTriggerMode {
  * @param mode The trigger mode to store.
  */
 export function setTranslationTrigger(mode: TranslationTriggerMode): void {
-  localStorage.setItem(TRIGGER_KEY, mode);
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualTranslationTrigger, mode);
+  bumpPrefsVersion();
+  scheduleUserSave();
 }
 
 /**
- * Whether grammar checking is enabled.
+ * Whether grammar checking is enabled for this user.
  *
  * @returns True unless the user disabled it.
  */
 export function grammarCheckingEnabled(): boolean {
-  return localStorage.getItem(GRAMMAR_ENABLED_KEY) !== "off";
+  return currentUser()?.getPreference(
+    UserPreference.BilingualGrammarChecking
+  ) ?? true;
 }
 
 /**
@@ -47,7 +160,10 @@ export function grammarCheckingEnabled(): boolean {
  * @param enabled Whether checking should be enabled.
  */
 export function setGrammarCheckingEnabled(enabled: boolean): void {
-  localStorage.setItem(GRAMMAR_ENABLED_KEY, enabled ? "on" : "off");
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualGrammarChecking, enabled);
+  bumpPrefsVersion();
+  scheduleUserSave();
 }
 
 /**
@@ -56,9 +172,8 @@ export function setGrammarCheckingEnabled(enabled: boolean): void {
  * @returns "default" or "picky", defaulting to "default".
  */
 export function grammarLevel(): "default" | "picky" {
-  return localStorage.getItem(GRAMMAR_LEVEL_KEY) === "picky"
-    ? "picky"
-    : "default";
+  return (currentUser()?.getPreference(UserPreference.BilingualGrammarLevel) ??
+    "default") as "default" | "picky";
 }
 
 /**
@@ -67,5 +182,57 @@ export function grammarLevel(): "default" | "picky" {
  * @param level The level to store.
  */
 export function setGrammarLevel(level: "default" | "picky"): void {
-  localStorage.setItem(GRAMMAR_LEVEL_KEY, level);
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualGrammarLevel, level);
+  bumpPrefsVersion();
+  scheduleUserSave();
+}
+
+/**
+ * The rule ids the user has chosen to ignore.
+ *
+ * @returns The ignored rule ids.
+ */
+export function grammarIgnoredRules(): string[] {
+  return (
+    currentUser()?.getPreference(
+      UserPreference.BilingualGrammarIgnoredRules
+    ) ?? []
+  );
+}
+
+/**
+ * Persists an ignored rule id.
+ *
+ * @param ruleId The rule id to ignore.
+ * @returns The updated ignored rule ids.
+ */
+export function addGrammarIgnoredRule(ruleId: string): string[] {
+  const rules = [...new Set([...grammarIgnoredRules(), ruleId])];
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualGrammarIgnoredRules, rules);
+  bumpPrefsVersion();
+  scheduleUserSave();
+  return rules;
+}
+
+/**
+ * Whether opening the bilingual view translates content automatically.
+ *
+ * @returns True by default; false restricts translation to visible blocks on demand.
+ */
+export function autoTranslateOnOpen(): boolean {
+  return currentUser()?.getPreference(UserPreference.BilingualAutoTranslate) ?? true;
+}
+
+/**
+ * Persists the automatic translation toggle.
+ *
+ * @param enabled Whether content should translate automatically.
+ */
+export function setAutoTranslateOnOpen(enabled: boolean): void {
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualAutoTranslate, enabled);
+  bumpPrefsVersion();
+  scheduleUserSave();
 }

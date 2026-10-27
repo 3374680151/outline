@@ -5,6 +5,7 @@ import { Switch, Redirect, matchPath, useHistory } from "react-router-dom";
 import DocumentNew from "~/scenes/DocumentNew";
 import Error404 from "~/scenes/Errors/Error404";
 import AuthenticatedLayout from "~/components/AuthenticatedLayout";
+import { BilingualPairProvider } from "~/components/BilingualPairProvider";
 import CenteredContent from "~/components/CenteredContent";
 import PlaceholderDocument from "~/components/PlaceholderDocument";
 import Route from "~/components/ProfiledRoute";
@@ -45,6 +46,18 @@ const RedirectDocument = ({
   />
 );
 
+const RedirectBilingual = ({
+  match,
+}: RouteComponentProps<{ documentSlug: string }>) => (
+  <Redirect
+    to={
+      match.params.documentSlug
+        ? `/doc/${match.params.documentSlug}?bilingual=1`
+        : homePath()
+    }
+  />
+);
+
 /**
  * The authenticated routes are all the routes of the application that require
  * the user to be logged in.
@@ -72,15 +85,16 @@ function AuthenticatedRoutes() {
   return (
     <WebsocketProvider>
       <AuthenticatedLayout>
-        <Suspense
-          fallback={
-            <CenteredContent>
-              <PlaceholderDocument />
-            </CenteredContent>
-          }
-        >
-          <SplitView>
-            <Switch>
+        <BilingualPairProvider>
+          <Suspense
+            fallback={
+              <CenteredContent>
+                <PlaceholderDocument />
+              </CenteredContent>
+            }
+          >
+            <SplitView>
+              <Switch>
               {can.createDocument && (
                 <Route
                   exact
@@ -143,7 +157,7 @@ function AuthenticatedRoutes() {
               <Route
                 exact
                 path={`/doc/${documentSlug}/bilingual`}
-                component={Scenes.BilingualDocument.Component}
+                component={RedirectBilingual}
               />
               <Route exact path="/bilingual" component={Scenes.Bilingual.Component} />
 
@@ -174,9 +188,10 @@ function AuthenticatedRoutes() {
               <Route exact path="/404" component={Error404} />
               <SettingsRoutes />
               <Route component={Error404} />
-            </Switch>
+              </Switch>
           </SplitView>
         </Suspense>
+        </BilingualPairProvider>
       </AuthenticatedLayout>
     </WebsocketProvider>
   );

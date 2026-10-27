@@ -3,7 +3,9 @@ import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
+import type { BilingualBlockState } from "@shared/types/bilingual";
 import bilingualCreator from "@server/commands/bilingualCreator";
+import bilingualMergeExporter from "@server/commands/bilingualMergeExporter";
 import { BilingualPair, Document } from "@server/models";
 import { authorize } from "@server/policies";
 import {
@@ -116,7 +118,8 @@ router.post(
       userId: user.id,
       includeState: false,
       includeViews: false,
-      attributes: ["id", "title", "collectionId"],
+      // createdById is required by the access filter for unattached drafts.
+      attributes: ["id", "title", "collectionId", "createdById"],
     });
     const documentsById = new Map(documents.map((doc) => [doc.id, doc]));
 
@@ -143,7 +146,7 @@ router.post(
   validate(T.BilingualUpdateStateSchema),
   transaction(),
   async (ctx: APIContext<T.BilingualUpdateStateReq>) => {
-    const { pairId, blockStates } = ctx.input.body;
+    const { pairId, blockStates, changes } = ctx.input.body;
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
 
@@ -159,8 +162,35 @@ router.post(
     });
     authorize(user, "update", source);
 
-    // Replace the array rather than mutating it in place.
-    pair.set("blockStates", blockStates);
+    if (blockStates !== undefined) {
+      // Replace the array rather than mutating it in place.
+      pair.set("blockStates", blockStates);
+    } else if (changes !== undefined) {
+      // Merge incremental changes into the stored array, padding missing
+      // leading entries so no sparse holes are stored as JSON null.
+      const existing = [...(pair.blockStates ?? [])];
+      const emptyState: BilingualBlockState = {
+        status: "empty",
+        sourceHash: "",
+        autoText: "",
+      };
+
+      for (const change of changes) {
+        while (existing.length < change.index) {
+          existing.push({ ...emptyState });
+        }
+
+        existing[change.index] = {
+          status: change.status,
+          sourceHash: change.sourceHash,
+          autoText: change.autoText,
+          ...(change.error ? { error: change.error } : {}),
+        };
+      }
+
+      pair.set("blockStates", existing);
+    }
+
     await pair.save({ transaction });
 
     ctx.body = {
@@ -209,6 +239,43 @@ router.post(
 
     ctx.body = {
       data: { pair: presentBilingualPair(pair) },
+    };
+  }
+);
+
+router.post(
+  "bilingual.saveMerged",
+  auth(),
+  rateLimiter(RateLimiterStrategy.TenPerMinute),
+  validate(T.BilingualSaveMergedSchema),
+  transaction(),
+  async (ctx: APIContext<T.BilingualSaveMergedReq>) => {
+    const { pairId, title, collectionId, publish } = ctx.input.body;
+    const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
+
+    const pair = await BilingualPair.findByPk(pairId, {
+      transaction,
+      rejectOnEmpty: true,
+    });
+
+    const source = await Document.findByPk(pair.sourceDocumentId, {
+      userId: user.id,
+      transaction,
+      rejectOnEmpty: true,
+    });
+    authorize(user, "update", source);
+
+    const document = await bilingualMergeExporter(ctx, {
+      pair,
+      ...(title !== undefined ? { title } : {}),
+      ...(collectionId !== undefined ? { collectionId } : {}),
+      ...(publish !== undefined ? { publish } : {}),
+    });
+
+    ctx.body = {
+      data: { document: await presentDocument(ctx, document) },
+      policies: presentPolicies(user, [document]),
     };
   }
 );

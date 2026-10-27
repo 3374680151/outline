@@ -76,14 +76,35 @@ class LanguageToolClient {
   }
 
   /**
+   * Whether a LanguageTool server is reachable for a workspace, taking a
+   * workspace level URL override into account.
+   *
+   * @param baseUrlOverride The workspace configured server URL, if any.
+   * @returns True when grammar checking is usable.
+   */
+  public isConfiguredFor(baseUrlOverride?: string | null): boolean {
+    if (!env.GRAMMAR_CHECKING_ENABLED) {
+      return false;
+    }
+
+    return !!(baseUrlOverride || env.LANGUAGETOOL_URL);
+  }
+
+  /**
    * Checks text against the LanguageTool server, applying the circuit
    * breaker. Response matches are whitelisted to the fields clients need.
    *
    * @param params The check parameters.
+   * @param options Optional overrides, e.g. a workspace configured server URL.
    * @returns The whitelisted matches, or an unavailable result.
    */
-  public async check(params: GrammarCheckParams): Promise<GrammarCheckResult> {
-    if (!this.isConfigured) {
+  public async check(
+    params: GrammarCheckParams,
+    options?: { baseUrl?: string | null }
+  ): Promise<GrammarCheckResult> {
+    const baseUrl = options?.baseUrl || env.LANGUAGETOOL_URL;
+
+    if (!baseUrl || !env.GRAMMAR_CHECKING_ENABLED) {
       return { available: false, reason: "not-configured" };
     }
 
@@ -108,7 +129,7 @@ class LanguageToolClient {
     });
 
     try {
-      const response = await fetch(`${env.LANGUAGETOOL_URL}/v2/check`, {
+      const response = await fetch(`${baseUrl}/v2/check`, {
         method: "POST",
         timeout: env.LANGUAGETOOL_TIMEOUT_MS,
         allowPrivateIPAddress: true,

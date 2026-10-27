@@ -14,6 +14,7 @@ import {
   VIEWPORT_INSET,
 } from "~/utils/bilingual/overlay";
 import { normalizeEnglishWord, sentenceAtOffset, wordAtOffset } from "~/utils/bilingual/wordNormalize";
+import { translationTrigger } from "~/utils/bilingual/prefs";
 
 /**
  * Options for the hover translate extension.
@@ -23,6 +24,11 @@ interface HoverTranslateOptions {
   mode: "off" | "dot" | "hover";
   /** Called to write a translation into the mirror document block. */
   onInsertText?: (blockIndex: number, text: string) => void;
+  /**
+   * An additional live gate, e.g. "not the mirror pane", read at event time
+   * so pane changes apply without remounting.
+   */
+  gate?: () => boolean;
 }
 
 /** Anchor rect of the dot, in viewport coordinates. */
@@ -83,13 +89,27 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
     return true;
   }
 
+  /**
+   * The trigger mode, read live from the user's preferences so toggling it
+   * takes effect without remounting the editor.
+   *
+   * @returns The configured trigger mode.
+   */
+  private get mode(): "off" | "dot" | "hover" {
+    if (this.options.gate?.() === false) {
+      return "off";
+    }
+
+    return translationTrigger();
+  }
+
   get plugins() {
     return [
       new Plugin({
         props: {
           handleDOMEvents: {
             mousemove: action((view: EditorView, event: MouseEvent) => {
-              if (this.options.mode !== "hover") {
+              if (this.mode !== "hover") {
                 return false;
               }
 
@@ -172,7 +192,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
   showForSelection = action((view: EditorView) => {
     const { selection } = view.state;
 
-    if (selection.empty || this.options.mode === "off") {
+    if (selection.empty || this.mode === "off") {
       this.hideDot();
       return;
     }
@@ -207,7 +227,10 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
     };
     this.renderDot();
 
-    if (isWord && this.editor) {
+    // FluentRead "direct mode": in hover-triggered flows the word card opens
+    // immediately. With the (default) dot trigger the card waits for an
+    // explicit click so nothing appears without a user action.
+    if (isWord && this.mode === "hover" && this.editor) {
       this.openPopover(this.editor.props.id as string);
     }
   });

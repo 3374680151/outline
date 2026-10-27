@@ -13,6 +13,13 @@ import Desktop from "./Desktop";
  */
 export const splitViewQueryParam = "split";
 
+/**
+ * Name of the query string parameter that marks the open split view as the
+ * bilingual editing mode: the secondary pane holds the mirror document of
+ * the pair, and the bilingual toolbar is active.
+ */
+export const bilingualViewQueryParam = "bilingual";
+
 /** Identifies a pane within the split view. */
 export type SplitViewPane = "primary" | "secondary";
 
@@ -64,6 +71,66 @@ export function setSplitPath(search: string, path: string | undefined): string {
 
   const stringified = queryString.stringify(params);
   return stringified ? `?${stringified}` : "";
+}
+
+/**
+ * Parses whether the bilingual editing flag is present in a location search
+ * string.
+ *
+ * @param search the location search string, with or without a leading "?".
+ * @returns true when the bilingual flag is set.
+ */
+export function isBilingualView(search: string): boolean {
+  const value = queryString.parse(search)[bilingualViewQueryParam];
+  const flag = Array.isArray(value) ? value[value.length - 1] : value;
+  return flag === "" || flag === "1" || flag === "true";
+}
+
+/**
+ * Returns a new search string with the bilingual flag set or removed,
+ * preserving all other query parameters.
+ *
+ * @param search the current location search string.
+ * @param enabled whether the bilingual flag should be present.
+ * @returns the updated search string, prefixed with "?" when non-empty.
+ */
+export function setBilingualFlag(search: string, enabled: boolean): string {
+  const params = queryString.parse(search);
+
+  if (enabled) {
+    params[bilingualViewQueryParam] = "1";
+  } else {
+    delete params[bilingualViewQueryParam];
+  }
+
+  const stringified = queryString.stringify(params);
+  return stringified ? `?${stringified}` : "";
+}
+
+/**
+ * Opens the bilingual editing view for a pair: the source document becomes
+ * the primary pane and the mirror document the secondary pane, mirroring the
+ * native "open in split view" behavior with the bilingual flag attached.
+ *
+ * @param history the history instance to navigate with.
+ * @param primaryPath the internal path of the source document.
+ * @param secondaryPath the internal path of the mirror document.
+ */
+export function openBilingualRoute(
+  history: History,
+  primaryPath: string,
+  secondaryPath: string
+): void {
+  const primary = parsePath(primaryPath);
+  setFocusedSplitPane("primary");
+
+  withoutSplitViewNavigation(() => {
+    history.push({
+      pathname: primary.pathname,
+      hash: primary.hash,
+      search: setBilingualFlag(setSplitPath("", secondaryPath), true),
+    });
+  });
 }
 
 const nonSplitViewPrefixes = [
@@ -333,7 +400,7 @@ export function closeSplitPane(
       const target = parsePath(splitPath);
       history.push({
         ...target,
-        search: setSplitPath(target.search, undefined),
+        search: setBilingualFlag(setSplitPath(target.search, undefined), false),
       });
       return;
     }
@@ -342,7 +409,7 @@ export function closeSplitPane(
       pathname: location.pathname,
       hash: location.hash,
       state: location.state,
-      search: setSplitPath(location.search, undefined),
+      search: setBilingualFlag(setSplitPath(location.search, undefined), false),
     });
   });
 }

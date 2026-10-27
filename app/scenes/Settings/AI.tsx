@@ -16,6 +16,7 @@ import Tooltip from "~/components/Tooltip";
 import CopyToClipboard from "~/components/CopyToClipboard";
 import NudeButton from "~/components/NudeButton";
 import { useTheme } from "styled-components";
+import { AiServicesSection } from "./components/AiServicesSection";
 
 function AI() {
   const { t } = useTranslation();
@@ -140,6 +141,8 @@ function AI() {
           }
         />
       )}
+
+      <AiServicesSection />
 
       <Heading as="h2">{t("AI answers")}</Heading>
       <SettingRow

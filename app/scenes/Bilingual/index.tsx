@@ -7,9 +7,10 @@ import type { BilingualPairDTO } from "@shared/types/bilingual";
 import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import LoadingIndicator from "~/components/LoadingIndicator";
+import { useBilingualPairPaths } from "~/components/BilingualPairProvider";
 import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
-import { bilingualEditorPathById } from "~/utils/routeHelpers";
+import { openBilingualRoute } from "~/utils/splitView";
 
 type PairRow = BilingualPairDTO & {
   sourceTitle: string;
@@ -19,16 +20,28 @@ type PairRow = BilingualPairDTO & {
 
 /**
  * The bilingual documents index: every bilingual pair of the workspace with
- * a shortcut into the split editor, plus creation of a new pair.
+ * a shortcut into the split view, plus creation of a new pair.
  */
 const BilingualScene: React.FC = observer(function BilingualScene() {
   const { t } = useTranslation();
+  const toPaths = useBilingualPairPaths();
   const [pairs, setPairs] = React.useState<PairRow[] | null>(null);
   const [creating, setCreating] = React.useState(false);
 
   React.useEffect(() => {
     void BilingualStore.listPairs().then((result) => setPairs(result));
   }, []);
+
+  const openPair = React.useCallback(
+    async (row: PairRow) => {
+      const paths = await toPaths(row.sourceDocumentId, row.targetDocumentId);
+
+      if (paths) {
+        openBilingualRoute(history, paths.primaryPath, paths.secondaryPath);
+      }
+    },
+    [toPaths]
+  );
 
   const handleCreate = async () => {
     setCreating(true);
@@ -37,7 +50,11 @@ const BilingualScene: React.FC = observer(function BilingualScene() {
       const pair = await BilingualStore.createPair({
         title: t("Untitled"),
       });
-      history.push(bilingualEditorPathById(pair.sourceDocumentId));
+      const paths = await toPaths(pair.sourceDocumentId, pair.targetDocumentId);
+
+      if (paths) {
+        openBilingualRoute(history, paths.primaryPath, paths.secondaryPath);
+      }
     } finally {
       setCreating(false);
     }
@@ -59,11 +76,7 @@ const BilingualScene: React.FC = observer(function BilingualScene() {
         <List>
           {pairs.map((row) => (
             <Row key={row.id}>
-              <TitleLink
-                onClick={() =>
-                  history.push(bilingualEditorPathById(row.sourceDocumentId))
-                }
-              >
+              <TitleLink onClick={() => openPair(row)}>
                 {row.sourceTitle || t("Untitled")}
               </TitleLink>
               <Meta>{`${t("EN")} → ${t("CN")}`}</Meta>

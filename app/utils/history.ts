@@ -9,10 +9,12 @@ import { isMobile } from "@shared/utils/browser";
 import {
   getFocusedSplitPane,
   getSplitPath,
+  isBilingualView,
   isSplitViewModifierPressed,
   isSplitViewNavigationSuppressed,
   isSplittablePath,
   openRouteInSplit,
+  setBilingualFlag,
   setSplitPath,
 } from "./splitView";
 
@@ -101,9 +103,15 @@ function applySplitView(
     });
   }
 
+  const search = setSplitPath(descriptor.search ?? "", currentSplit);
+
+  // The bilingual flag belongs to the split view as a whole, so it follows
+  // primary pane navigation the same way the split parameter does.
   return {
     ...descriptor,
-    search: setSplitPath(descriptor.search ?? "", currentSplit),
+    search: isBilingualView(current.search)
+      ? setBilingualFlag(search, true)
+      : search,
   };
 }
 

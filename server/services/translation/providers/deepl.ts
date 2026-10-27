@@ -1,6 +1,11 @@
 import env from "@server/env";
 import fetch from "@server/utils/fetch";
-import type { TranslationProvider, TranslationRequest, TranslationResult } from "../types";
+import type {
+  TeamProviderConfig,
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+} from "../types";
 
 /** Map of ISO 639-1 codes to the uppercase codes the DeepL API expects. */
 const DEEPL_LANGUAGES: Record<string, string> = {
@@ -26,18 +31,26 @@ const deepl: TranslationProvider = {
   label: "DeepL",
   maxBatch: 50,
 
-  isConfigured() {
-    return !!env.DEEPL_API_KEY;
+  isConfigured(config?: TeamProviderConfig | null) {
+    return !!config?.apiKey || !!env.DEEPL_API_KEY;
   },
 
-  async translate(req: TranslationRequest): Promise<TranslationResult> {
+  async translate(
+    req: TranslationRequest,
+    config?: TeamProviderConfig | null
+  ): Promise<TranslationResult> {
+    const apiKey = config?.apiKey || env.DEEPL_API_KEY;
     const targetLang = DEEPL_LANGUAGES[req.to];
 
     if (!targetLang) {
       throw new Error(`DeepL does not support target language "${req.to}"`);
     }
 
-    const host = env.DEEPL_API_KEY?.endsWith(":fx")
+    if (!apiKey) {
+      throw new Error("deepl is not configured");
+    }
+
+    const host = apiKey.endsWith(":fx")
       ? "https://api-free.deepl.com"
       : "https://api.deepl.com";
 
@@ -47,7 +60,7 @@ const deepl: TranslationProvider = {
       signal: req.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `DeepL-Auth-Key ${env.DEEPL_API_KEY}`,
+        Authorization: `DeepL-Auth-Key ${apiKey}`,
       },
       body: JSON.stringify({
         text: req.texts,

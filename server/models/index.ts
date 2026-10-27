@@ -4,6 +4,8 @@ export { default as Attachment } from "./Attachment";
 
 export { default as BilingualPair } from "./BilingualPair";
 
+export { default as TeamAiConfig } from "./TeamAiConfig";
+
 export { default as AuthenticationProvider } from "./AuthenticationProvider";
 
 export { default as Relationship } from "./Relationship";

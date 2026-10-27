@@ -55,6 +55,17 @@ describe("#bilingual.create", () => {
     expect(body.data.target.language).toEqual("zh");
   });
 
+  it("should create the mirror as an unattached draft", async () => {
+    const res = await server.post("/api/bilingual.create", user, {
+      body: { documentId: document.id },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.target.collectionId).toEqual(null);
+    expect(body.data.target.publishedAt).toEqual(null);
+  });
+
   it("should reject a document that is already paired", async () => {
     await server.post("/api/bilingual.create", user, {
       body: { documentId: document.id },
@@ -175,6 +186,40 @@ describe("#bilingual.updateState", () => {
     expect(infoBody.data.pair.blockStates).toHaveLength(2);
     expect(infoBody.data.pair.blockStates[1].status).toEqual("manual");
   });
+
+  it("persists incremental block state changes", async () => {
+    const created = await server.post("/api/bilingual.create", user, {
+      body: { documentId: document.id },
+    });
+    const createdBody = await created.json();
+    const pairId = createdBody.data.pair.id;
+
+    const first = await server.post("/api/bilingual.updateState", user, {
+      body: {
+        pairId,
+        changes: [
+          { index: 1, status: "auto", sourceHash: "h1", autoText: "第一段" },
+        ],
+      },
+    });
+    expect(first.status).toEqual(200);
+
+    const second = await server.post("/api/bilingual.updateState", user, {
+      body: {
+        pairId,
+        changes: [
+          { index: 3, status: "manual", sourceHash: "h2", autoText: "" },
+        ],
+      },
+    });
+    const body = await second.json();
+
+    expect(second.status).toEqual(200);
+    expect(body.data.pair.blockStates).toHaveLength(4);
+    expect(body.data.pair.blockStates[1].autoText).toEqual("第一段");
+    expect(body.data.pair.blockStates[3].status).toEqual("manual");
+    expect(body.data.pair.blockStates[0].status).toEqual("empty");
+  });
 });
 
 describe("#bilingual.list", () => {
@@ -205,6 +250,60 @@ describe("#bilingual.list", () => {
     expect(res.status).toEqual(200);
     expect(body.data.pairs).toHaveLength(1);
     expect(body.data.pairs[0].sourceTitle).toEqual(document.title);
+  });
+});
+
+describe("#bilingual.saveMerged", () => {
+  let user: User;
+  let collection: Collection;
+  let document: Document;
+
+  beforeEach(async () => {
+    user = await buildUser();
+    collection = await buildCollection({
+      createdById: user.id,
+      teamId: user.teamId,
+    });
+    document = await buildDocument({
+      createdById: user.id,
+      teamId: user.teamId,
+      collectionId: collection.id,
+      text: "First paragraph\n\nSecond paragraph",
+    });
+  });
+
+  it("creates one merged document with interleaved translations", async () => {
+    const created = await server.post("/api/bilingual.create", user, {
+      body: { documentId: document.id },
+    });
+    const createdBody = await created.json();
+    const pairId = createdBody.data.pair.id;
+    const targetId = createdBody.data.target.id;
+
+    // Write translated content into the mirror document.
+    const updated = await server.post("/api/documents.update", user, {
+      body: {
+        id: targetId,
+        text: "第一段\n\n第二段",
+      },
+    });
+    expect(updated.status).toEqual(200);
+
+    const res = await server.post("/api/bilingual.saveMerged", user, {
+      body: { pairId, title: "Merged" },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.document.title).toEqual("Merged");
+
+    // The markdown of the merged document interleaves source paragraphs
+    // with their translations as quotes.
+    const text = body.data.document.text as string;
+    expect(text).toContain("First paragraph");
+    expect(text).toContain("> 第一段");
+    expect(text).toContain("Second paragraph");
+    expect(text).toContain("> 第二段");
   });
 });
 
