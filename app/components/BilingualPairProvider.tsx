@@ -46,12 +46,16 @@ export interface BilingualPairContextValue {
    */
   sideOf: (documentId: string) => BilingualSide | undefined;
   /**
-   * Registers the source pane's grammar extension so the toolbar can show
-   * issue counts and open the issue panel.
+   * Registers the grammar extension of one pane's editor, keyed by document
+   * id so the two panes never overwrite each other.
    *
+   * @param documentId The document the extension belongs to.
    * @param extension The extension instance, or null on unmount.
    */
-  registerGrammarExtension: (extension: GrammarCheckExtension | null) => void;
+  registerGrammarExtension: (
+    documentId: string,
+    extension: GrammarCheckExtension | null
+  ) => void;
   /** The registered grammar extension of the source pane. */
   grammarExtension: GrammarCheckExtension | null;
   /**
@@ -99,8 +103,11 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
   const team = useCurrentTeam({ rejectOnEmpty: false });
   const [pair, setPair] = React.useState<BilingualPairDTO | null>(null);
   const [pairSettled, setPairSettled] = React.useState(false);
-  const [grammarExtension, setGrammarExtension] =
-    React.useState<GrammarCheckExtension | null>(null);
+  /** Grammar extensions keyed by their document id (two panes coexist). */
+  const grammarByDoc = React.useRef(
+    new Map<string, GrammarCheckExtension>()
+  );
+  const [, bumpGrammarSlot] = React.useState(0);
 
   const requested = useLocationSelector((location) =>
     isBilingualView(location.search)
@@ -375,11 +382,22 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
   }, []);
 
   const registerGrammarExtension = React.useCallback(
-    (extension: GrammarCheckExtension | null) => {
-      setGrammarExtension(extension);
+    (documentId: string, extension: GrammarCheckExtension | null) => {
+      if (extension) {
+        grammarByDoc.current.set(documentId, extension);
+      } else {
+        grammarByDoc.current.delete(documentId);
+      }
+      bumpGrammarSlot((n) => n + 1);
     },
     []
   );
+
+  // The source pane's grammar extension, resolved from the per-document
+  // slots so the mirror pane can never clobber it.
+  const sourceGrammarExtension = pair
+    ? grammarByDoc.current.get(pair.sourceDocumentId) ?? null
+    : null;
 
   const value = React.useMemo<BilingualPairContextValue>(
     () => ({
@@ -389,7 +407,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       engine: pairActive ? engine : null,
       sideOf,
       registerGrammarExtension,
-      grammarExtension,
+      grammarExtension: pairActive ? sourceGrammarExtension : null,
       exit,
     }),
     [
@@ -399,7 +417,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       engine,
       sideOf,
       registerGrammarExtension,
-      grammarExtension,
+      sourceGrammarExtension,
       exit,
     ]
   );

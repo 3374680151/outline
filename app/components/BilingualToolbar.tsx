@@ -54,6 +54,10 @@ export const BilingualToolbar = observer(function BilingualToolbar({
   const hasMismatch = engine?.hasMismatch ?? false;
   const issueCount = grammarExtension?.issueCount ?? 0;
   const checking = grammarExtension?.checking ?? false;
+  const failedCount = engine?.failedCount ?? 0;
+  const outdatedManual = engine?.outdatedManualCount ?? 0;
+  const grammarUnavailable = grammarExtension?.unavailable ?? false;
+
 
   // Recomputed on each render: the observable issueCount/checking above
   // trigger re-renders whenever the underlying matches change.
@@ -282,6 +286,42 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           <span>{t("Structure out of sync")}</span>
           <RepairButton onClick={() => engine?.repair()}>
             {t("Repair")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {failedCount > 0 && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>
+            {t("{{count}} blocks failed to translate", { count: failedCount })}
+          </span>
+          <RepairButton
+            onClick={() => {
+              engine?.requeueFailed();
+              grammarExtension?.recheckAll();
+            }}
+          >
+            {t("Retry")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {grammarUnavailable && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>{t("Grammar service unavailable")}</span>
+          <RepairButton onClick={() => grammarExtension?.recheckAll()}>
+            {t("Retry")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {outdatedManual > 0 && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>
+            {t("{{count}} translations are outdated", { count: outdatedManual })}
+          </span>
+          <RepairButton onClick={() => engine?.retranslateOutdatedManual()}>
+            {t("Update")}
           </RepairButton>
         </WarningChip>
       )}

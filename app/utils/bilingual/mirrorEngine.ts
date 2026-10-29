@@ -128,6 +128,14 @@ export class MirrorEngine {
   @observable
   progress = { translated: 0, total: 0 };
 
+  /** Number of blocks whose last translation attempt failed. */
+  @observable
+  failedCount = 0;
+
+  /** Manually translated blocks whose source text has moved on. */
+  @observable
+  outdatedManualCount = 0;
+
   /** Set of block indexes whose mirror content was written by a human. */
   private humanEdited = new Set<number>();
 
@@ -148,6 +156,12 @@ export class MirrorEngine {
 
   /** Deferred heal timer for content drift. */
   private healTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Timer for the next automatic retry after a failed translation batch. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Consecutive failed batches; automatic retries stop after ten. */
+  private failedBatches = 0;
 
   /** Translations that succeeded but could not be written to the target yet. */
   private pendingWrites = new Map<
@@ -194,6 +208,11 @@ export class MirrorEngine {
     this.lastSignatures = viewBlockSignatures(view);
     this.lastTextHashes = viewBlockTextHashes(view, textHash);
     this.alignBlockStatesLength();
+    // Reconcile stored translation states against the document as it exists
+    // right now: with local persistence the content is present before any
+    // transaction fires, so this is the only pass that catches source text
+    // edited elsewhere or left stale by a failed translation.
+    this.detectTextChanges(true);
     this.updateProgress();
     // Queue content for its first translation (enabling bilingual mode on a
     // document that already has text).
@@ -290,6 +309,11 @@ export class MirrorEngine {
       clearTimeout(this.healTimer);
       this.healTimer = null;
     }
+
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   /**
@@ -329,6 +353,12 @@ export class MirrorEngine {
     this.lastTextHashes = viewBlockTextHashes(this.sourceView, textHash);
     this.alignBlockStatesLength();
     this.ensureTargetStructure();
+
+    // Content that arrives through sync (initial load, edits from another
+    // device) must go through the same text diff as local typing: stored
+    // translations whose source hash no longer matches are stale and get
+    // re-queued here, which is what recovers pairs after a reload.
+    this.detectTextChanges();
     this.updateProgress();
     this.checkConsistency();
     this.queueUntranslatedBlocks();
@@ -508,7 +538,7 @@ export class MirrorEngine {
    * Detects per-block text changes and queues translation for blocks whose
    * source text changed since their last translation.
    */
-  private detectTextChanges() {
+  private detectTextChanges(force = false) {
     const sourceView = this.sourceView;
     const targetView = this.targetView;
 
@@ -523,8 +553,15 @@ export class MirrorEngine {
       const state = this.blockStates[i] ?? emptyState();
 
       // Unchanged since the last translation (covers blocks that only
-      // shifted position after a structural edit).
-      if (hashes[i] === this.lastTextHashes[i] || hashes[i] === state.sourceHash) {
+      // shifted position after a structural edit). Forced reconciliation
+      // skips the last-seen shortcut so stored hashes are checked directly.
+      if (!force && (hashes[i] === this.lastTextHashes[i] || hashes[i] === state.sourceHash)) {
+        continue;
+      }
+
+      // A failed attempt stores the hash of the text it tried to translate,
+      // so on forced reconciliation a failed block must still be re-queued.
+      if (force && hashes[i] === state.sourceHash && state.status !== "failed") {
         continue;
       }
 
@@ -661,6 +698,7 @@ export class MirrorEngine {
           }
           this.updateProgress();
           this.schedulePersist();
+          this.scheduleAutoRetry();
           return;
         }
 
@@ -705,6 +743,7 @@ export class MirrorEngine {
 
         this.updateProgress();
         this.checkConsistency();
+        this.failedBatches = 0;
         this.schedulePersist();
       }
     }
@@ -889,6 +928,28 @@ export class MirrorEngine {
   }
 
   /**
+   * Schedules one automatic retry of failed blocks after a service outage,
+   * so content recovers without user action. Retries stop after ten
+   * consecutive failed batches and can always be triggered manually from
+   * the toolbar.
+   */
+  private scheduleAutoRetry() {
+    this.failedBatches++;
+
+    if (this.failedBatches > 10 || this.retryTimer) {
+      return;
+    }
+
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+
+      if (!this.destroyed && this.failedCount > 0) {
+        this.requeueFailed();
+      }
+    }, 30000);
+  }
+
+  /**
    * Records a block index whose state changed since the last persist.
    *
    * @param index The block index.
@@ -918,9 +979,110 @@ export class MirrorEngine {
       }
     });
 
+    let failed = 0;
+    let outdatedManual = 0;
+    const targetView = this.targetView;
+
+    for (let i = 0; i < this.blockStates.length; i++) {
+      const state = this.blockStates[i];
+
+      if (state.status === "failed") {
+        failed++;
+      }
+
+      // A manually written mirror text that differs from the latest engine
+      // translation: the protection rule kept the user's words, and the
+      // toolbar offers a one-click update to the fresh translation.
+      if (
+        state.status === "manual" &&
+        state.autoText &&
+        targetView &&
+        i < targetView.state.doc.childCount &&
+        targetView.state.doc.child(i).textContent !== state.autoText
+      ) {
+        outdatedManual++;
+      }
+    }
+
     runInAction(() => {
       this.progress = { translated, total };
+      this.failedCount = failed;
+      this.outdatedManualCount = outdatedManual;
     });
+  }
+
+  /**
+   * Force re-translates manually written blocks whose source text has moved
+   * on, overwriting the protected content. Driven by the toolbar's
+   * "translations outdated" action after the user confirms.
+   */
+  retranslateOutdatedManual() {
+    if (this.destroyed || !this.targetView) {
+      return;
+    }
+
+    let requeued = false;
+    const targetView = this.targetView;
+
+    this.blockStates.forEach((state, index) => {
+      if (
+        state.status !== "manual" ||
+        !state.autoText ||
+        index >= targetView.state.doc.childCount
+      ) {
+        return;
+      }
+
+      const mirrorText = targetView.state.doc.child(index).textContent;
+
+      if (mirrorText === state.autoText) {
+        return;
+      }
+
+      this.humanEdited.delete(index);
+      this.forced.add(index);
+      this.blockStates[index] = reduceBlockState(state, false, {
+        type: "retranslateConfirmed",
+        sourceHash: state.sourceHash,
+      });
+      this.translateQueue.add(index);
+      requeued = true;
+    });
+
+    if (requeued) {
+      this.scheduleTranslate();
+      this.schedulePersist();
+    }
+  }
+
+  /**
+   * Re-queues every failed block, retrying translations that previously
+   * could not reach the service. Called from the toolbar retry action and
+   * after a failed batch so recovery never requires a reload.
+   */
+  requeueFailed() {
+    if (this.destroyed || !this.sourceView) {
+      return;
+    }
+
+    let requeued = false;
+
+    this.blockStates.forEach((state, index) => {
+      if (state.status === "failed") {
+        this.blockStates[index] = reduceBlockState(
+          state,
+          this.humanEdited.has(index),
+          { type: "retranslateConfirmed", sourceHash: state.sourceHash }
+        );
+        this.translateQueue.add(index);
+        requeued = true;
+      }
+    });
+
+    if (requeued) {
+      this.scheduleTranslate();
+      this.schedulePersist();
+    }
   }
 
   /**

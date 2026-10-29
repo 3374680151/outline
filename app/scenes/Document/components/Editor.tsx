@@ -275,15 +275,18 @@ function DocumentEditor(props: Props) {
     const extension = grammarExtensionRef.current;
 
     if (extension && bilingualActive && bilingualSide === "source") {
-      registerGrammarExtension(extension);
+      registerGrammarExtension(document.id, extension);
     }
 
     return () => {
-      if (extension) {
-        registerGrammarExtension(null);
-      }
+      registerGrammarExtension(document.id, null);
     };
-  }, [bilingualActive, registerGrammarExtension, bilingualSide]);
+  }, [
+    bilingualActive,
+    registerGrammarExtension,
+    bilingualSide,
+    document.id,
+  ]);
 
   return (
     <Flex auto column>

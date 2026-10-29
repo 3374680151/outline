@@ -114,7 +114,7 @@ export const PersonalDocs = observer(function PersonalDocs() {
       hasCollection
         ? [newDocAction, newBilingualDocAction, sortCollection]
         : [newDocAction, newBilingualDocAction],
-    [hasCollection, newDocAction, newBilingualDocAction, sortCollection]
+    [hasCollection, newDocAction, newBilingualDocAction]
   );
   const activeModels = useMemo(
     () => (collection ? [collection] : undefined),

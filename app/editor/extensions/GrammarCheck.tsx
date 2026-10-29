@@ -217,6 +217,30 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   }
 
   /**
+   * Clears every stored result and re-queues all visible blocks, recovering
+   * the underlines after the grammar service was unreachable.
+   */
+  recheckAll() {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.matchesByBlock.clear();
+    this.sentHashByBlock.clear();
+    this.refreshDecorations();
+    this.notifyIssueCount();
+
+    const view = this.editor?.view;
+
+    if (view) {
+      for (let i = 0; i < view.state.doc.childCount; i++) {
+        this.queue.add(i);
+      }
+      this.scheduleCheck();
+    }
+  }
+
+  /**
    * Removes a single occurrence of an issue ("skip this one"), without
    * touching the rule.
    *
@@ -382,6 +406,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
    * Debounces the check queue flush.
    */
   private scheduleCheck() {
+
     if (!this.enabled) {
       return;
     }
@@ -401,6 +426,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
    */
   private async flush() {
     const view = this.editor?.view;
+
 
     if (!view || !this.enabled) {
       return;
@@ -472,13 +498,26 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     } catch (err) {
       runInAction(() => {
         this.checking = false;
+        this.unavailable = true;
       });
 
-      // Network failure: drop this round quietly; the next edit re-queues
-      // the blocks and the server-side breaker protects the sidecar.
+      // Network failure (including batched requests failing at the HTTP
+      // layer): surface the outage in the toolbar and schedule one delayed
+      // retry, so underlines recover on their own once the service is back.
       Logger.warn("grammar check failed", {
         message: err instanceof Error ? err.message : String(err),
       });
+
+      for (const item of batch) {
+        this.queue.add(item.index);
+      }
+
+      if (!this.checkTimer) {
+        this.checkTimer = setTimeout(() => {
+          this.checkTimer = null;
+          void this.flush();
+        }, 20000);
+      }
       return;
     }
 
@@ -507,9 +546,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
         this.sentHashByBlock.set(item.index, item.hash);
 
         if (!result || !result.available) {
-          if (result?.reason && result.reason !== "circuit-open") {
-            this.unavailable = true;
-          }
+          // Any "not available" outcome — including an open circuit breaker —
+          // means the service is unreachable right now and must be surfaced
+          // in the toolbar rather than silently dropping underlines.
+          this.unavailable = true;
           this.matchesByBlock.delete(item.index);
           continue;
         }
