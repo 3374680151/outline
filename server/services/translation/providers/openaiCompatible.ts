@@ -71,6 +71,7 @@ const openaiCompatible: TranslationProvider = {
       method: "POST",
       timeout: 60000,
       signal: req.signal,
+      allowPrivateIPAddress: true,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,

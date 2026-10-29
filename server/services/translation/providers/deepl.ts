@@ -58,6 +58,7 @@ const deepl: TranslationProvider = {
       method: "POST",
       timeout: 30000,
       signal: req.signal,
+      allowPrivateIPAddress: true,
       headers: {
         "Content-Type": "application/json",
         Authorization: `DeepL-Auth-Key ${apiKey}`,

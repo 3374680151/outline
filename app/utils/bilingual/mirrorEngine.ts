@@ -542,10 +542,12 @@ export class MirrorEngine {
       this.blockStates[i] = nextState;
       this.markDirty(i);
 
-      // Re-translate blocks whose source changed, both untranslated ones and
-      // stale ones (the write path protects human mirror edits).
+      // Re-translate blocks whose source changed: untranslated, stale, and
+      // failed ones (the write path protects human mirror edits).
       if (
-        (nextState.status === "empty" || nextState.status === "stale") &&
+        (nextState.status === "empty" ||
+          nextState.status === "stale" ||
+          nextState.status === "failed") &&
         translatable
       ) {
         this.translateQueue.add(i);
@@ -1149,11 +1151,16 @@ export class MirrorEngine {
     sourceView.state.doc.forEach((node, _offset, index) => {
       const state = this.blockStates[index] ?? emptyState();
 
+      // Re-queue untranslated blocks and ones whose last attempt failed or
+      // went stale, so content recovers automatically once the translation
+      // service is reachable again.
       if (
         node.textContent.trim().length > 0 &&
         isTextReplaceable(node) &&
-        state.status === "empty" &&
-        !state.sourceHash
+        (state.status === "empty" ||
+          state.status === "stale" ||
+          state.status === "failed" ||
+          (!state.sourceHash && !state.autoText))
       ) {
         candidates.push(index);
       }
@@ -1162,6 +1169,7 @@ export class MirrorEngine {
     const visible = candidates.filter((index) =>
       this.visibleBlocks.size === 0 ? true : this.visibleBlocks.has(index)
     );
+    void visible;
     const hidden = this.visibleBlocks.size
       ? candidates.filter((index) => !this.visibleBlocks.has(index))
       : [];

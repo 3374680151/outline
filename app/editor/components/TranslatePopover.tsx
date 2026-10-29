@@ -5,6 +5,8 @@ import { s } from "@shared/styles";
 import { useTranslation } from "react-i18next";
 import type { GrammarMatchDTO, WordLookupDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
+import history from "~/utils/history";
+import { settingsPath } from "~/utils/routeHelpers";
 import { grammarLevel } from "~/utils/bilingual/prefs";
 import { GRAMMAR_TYPE_COLOR, matchType, type GrammarType } from "~/utils/bilingual/matchType";
 import { clampPanelPosition } from "~/utils/bilingual/overlay";
@@ -14,6 +16,9 @@ const POPOVER_WIDTH = 380;
 
 /** Approximate height used for viewport clamping before measuring. */
 const POPOVER_ESTIMATED_HEIGHT = 220;
+
+/** localStorage key remembering the translation service chosen in the card. */
+const PROVIDER_KEY = "bilingual-translation-provider";
 
 /**
  * Props for the translation popover.
@@ -53,7 +58,11 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [providers, setProviders] = React.useState<
     { id: string; label: string; configured: boolean }[]
   >([]);
-  const [providerId, setProviderId] = React.useState<string>("");
+  const [providerId, setProviderId] = React.useState<string>(() =>
+    localStorage.getItem(PROVIDER_KEY) ?? ""
+  );
+  const [copied, setCopied] = React.useState(false);
+  const [reloadToken, setReloadToken] = React.useState(0);
   const [grammarMatches, setGrammarMatches] = React.useState<
     { message: string; shortMessage?: string; type: string }[]
   >([]);
@@ -203,6 +212,8 @@ export const TranslatePopover = observer(function TranslatePopover(
   const handleCopy = () => {
     if (result) {
       void navigator.clipboard.writeText(result);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
     }
   };
 
@@ -234,9 +245,23 @@ export const TranslatePopover = observer(function TranslatePopover(
         <LangLabel>
           {t("Source")} · {isWord ? t("Word") : t("Detected English")}
         </LangLabel>
+        {providers.length === 0 && (
+          <NoProviderLink
+            onClick={() => {
+              onClose();
+              history.push(settingsPath("ai"));
+            }}
+          >
+            {t("No translation service configured — open settings")}
+          </NoProviderLink>
+        )}
         {providers.length > 0 && (
           <ServiceSelect
-            onChange={(event) => setProviderId(event.currentTarget.value)}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setProviderId(value);
+              localStorage.setItem(PROVIDER_KEY, value);
+            }}
             aria-label={t("Translation service")}
             value={providerId}
           >
@@ -257,7 +282,14 @@ export const TranslatePopover = observer(function TranslatePopover(
         {loading ? (
           <LoadingDots>{t("Translating…")}</LoadingDots>
         ) : error ? (
-          <ErrorText>{error}</ErrorText>
+          <ErrorRow>
+            <ErrorText>{error}</ErrorText>
+            <RetryButton
+              onClick={() => setReloadToken((token) => token + 1)}
+            >
+              {t("Retry")}
+            </RetryButton>
+          </ErrorRow>
         ) : (
           result
         )}
@@ -304,7 +336,7 @@ export const TranslatePopover = observer(function TranslatePopover(
       )}
       <Actions>
         <ActionButton onClick={handleCopy} disabled={!result}>
-          {t("Copy")}
+          {copied ? t("Copied") : t("Copy")}
         </ActionButton>
         <ActionButton onClick={handleSpeak} disabled={!result}>
           {t("Speak")}
@@ -489,3 +521,37 @@ const ActionButton = styled.button<{ $primary?: boolean }>`
 `;
 
 export default TranslatePopover;
+
+const NoProviderLink = styled.button`
+  background: none;
+  border: none;
+  color: ${s("accent")};
+  cursor: pointer;
+  font-size: 11.5px;
+  padding: 2px 4px;
+  white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const ErrorRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const RetryButton = styled.button`
+  background: ${s("backgroundSecondary")};
+  border: 1px solid ${s("divider")};
+  border-radius: 4px;
+  color: ${s("text")};
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 10px;
+  flex: none;
+
+  &:hover {
+    background: ${s("backgroundTertiary")};
+  }
+`;
