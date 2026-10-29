@@ -2,6 +2,7 @@ import { action, makeObservable, observable, runInAction } from "mobx";
 import type { EditorView } from "prosemirror-view";
 import type {
   BilingualBlockState,
+  BilingualListRow,
   BilingualPairDTO,
   WordLookupDTO,
 } from "@shared/types/bilingual";
@@ -72,6 +73,13 @@ class BilingualStore {
   /** Registered editor views keyed by document id (observable for adoption). */
   @observable
   views = observable.map<string, EditorView>();
+
+  /**
+   * Document ids known to belong to a bilingual pair, so the UI can badge
+   * them everywhere documents are listed without extra lookups.
+   */
+  @observable
+  bilingualDocIds = observable.set<string>();
 
   /**
    * Returns cached pair information without a network request.
@@ -146,6 +154,8 @@ class BilingualStore {
     };
     this.infoByDocument.set(pair.sourceDocumentId, info);
     this.infoByDocument.set(pair.targetDocumentId, info);
+    this.bilingualDocIds.add(pair.sourceDocumentId);
+    this.bilingualDocIds.add(pair.targetDocumentId);
   }
 
   /**
@@ -191,16 +201,16 @@ class BilingualStore {
    *
    * @returns The pairs with source and target titles.
    */
-  listPairs = async (): Promise<
-    (BilingualPairDTO & {
-      sourceTitle: string;
-      targetTitle: string;
-      sourceCollectionId: string | null;
-      targetDocumentId: string;
-    })[]
-  > => {
+  listPairs = async (): Promise<BilingualListRow[]> => {
     const res = await client.post("/bilingual.list", {});
-    return res.data.pairs;
+    const pairs = res.data.pairs as BilingualListRow[];
+    runInAction(() => {
+      for (const pair of pairs) {
+        this.bilingualDocIds.add(pair.sourceDocumentId);
+        this.bilingualDocIds.add(pair.targetDocumentId);
+      }
+    });
+    return pairs;
   };
 
   /**

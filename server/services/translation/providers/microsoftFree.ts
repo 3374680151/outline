@@ -64,6 +64,9 @@ const microsoftFree: TranslationProvider = {
       method: "POST",
       timeout: 20000,
       signal: req.signal,
+      // The provider is an outbound call to a service the admin configured;
+      // the local network may resolve it through a proxy's virtual DNS.
+      allowPrivateIPAddress: true,
       headers: {
         "Content-Type": "application/json",
       },

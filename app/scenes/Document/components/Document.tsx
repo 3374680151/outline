@@ -17,6 +17,7 @@ import parseDocumentSlug from "@shared/utils/parseDocumentSlug";
 import type Document from "~/models/Document";
 import type Revision from "~/models/Revision";
 import { useDocumentContext } from "~/components/DocumentContext";
+import { useSplitView } from "~/components/SplitView/context";
 import DocumentMove from "~/components/DocumentExplorer/DocumentMove";
 import DocumentPublish from "~/scenes/DocumentPublish";
 import ErrorBoundary from "~/components/ErrorBoundary";
@@ -94,6 +95,7 @@ function DocumentScene({
 }: Props) {
   const { auth, ui, dialogs } = useStores();
   const documentContext = useDocumentContext();
+  const { isSplitView } = useSplitView();
   const isMobile = useMobile();
   const { t } = useTranslation();
   const history = useHistory<LocationState>();
@@ -384,7 +386,10 @@ function DocumentScene({
       <RegisterKeyDown trigger="m" handler={onMove} />
       <RegisterKeyDown trigger="z" metaKey handler={onUndoRedo} />
       <RegisterKeyDown trigger="e" handler={goToEdit} />
-      <RegisterKeyDown trigger="Escape" handler={goBack} />
+      {/* Escape means "close the topmost layer". Inside a split pane it
+          would otherwise pop browser history once per pane, tearing the user
+          out of a split or bilingual view by accident. */}
+      {!isSplitView && <RegisterKeyDown trigger="Escape" handler={goBack} />}
       <RegisterKeyDown trigger="h" handler={goToHistory} />
       <RegisterKeyDown
         trigger="p"

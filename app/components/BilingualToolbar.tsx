@@ -21,6 +21,8 @@ import { useBilingualPair } from "~/components/BilingualPairProvider";
 import useStores from "~/hooks/useStores";
 import type Document from "~/models/Document";
 import BilingualStore from "~/stores/BilingualStore";
+import history from "~/utils/history";
+import { settingsPath } from "~/utils/routeHelpers";
 import {
   autoTranslateOnOpen,
   grammarCheckingEnabled,
@@ -45,13 +47,17 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 }) {
   const { t } = useTranslation();
   const { pair, engine, grammarExtension } = useBilingualPair();
-  const { dialogs, documents, policies } = useStores();
+  const { dialogs, documents, policies, collections } = useStores();
   const [saving, setSaving] = React.useState(false);
 
   const progress = engine?.progress ?? { translated: 0, total: 0 };
   const hasMismatch = engine?.hasMismatch ?? false;
   const issueCount = grammarExtension?.issueCount ?? 0;
   const checking = grammarExtension?.checking ?? false;
+  const failedCount = engine?.failedCount ?? 0;
+  const outdatedManual = engine?.outdatedManualCount ?? 0;
+  const grammarUnavailable = grammarExtension?.unavailable ?? false;
+
 
   // Recomputed on each render: the observable issueCount/checking above
   // trigger re-renders whenever the underlying matches change.
@@ -97,23 +103,41 @@ export const BilingualToolbar = observer(function BilingualToolbar({
         throw new Error("Mirror document unavailable");
       }
 
-      const collectionId = source?.collectionId ?? undefined;
+      // Follow the source's location when it has one; drafts without a
+      // collection land in the user's personal collection so the action
+      // always produces a document the user can find.
+      const collectionId = source?.collectionId ?? collections.personal?.id;
 
-      if (collectionId) {
-        await target.move({ collectionId });
+      if (!collectionId) {
+        throw new Error("No collection available");
       }
+
+      await target.move({ collectionId });
 
       if (source?.publishedAt) {
         await target.save(undefined, { publish: true });
       }
 
-      toast.success(t("Mirror saved as a standalone document"));
+      toast.success(t("Mirror saved as a standalone document"), {
+        action: {
+          label: t("Open"),
+          onClick: () => {
+            void (async () => {
+              const moved = documents.get(pair.targetDocumentId);
+              if (moved) {
+                const { documentPath } = await import("~/utils/routeHelpers");
+                history.push(documentPath(moved));
+              }
+            })();
+          },
+        },
+      });
     } catch (_err) {
       toast.error(t("Could not save the mirror document"));
     } finally {
       setSaving(false);
     }
-  }, [pair, saving, documents, t]);
+  }, [pair, saving, documents, collections, t]);
 
   const handleCopySource = React.useCallback(() => {
     dialogs.openModal({
@@ -222,6 +246,12 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           }),
         ],
       }),
+      createAction({
+        name: t("Translation & grammar services…"),
+        section: ActiveDocumentSection,
+        icon: <SettingsIcon />,
+        perform: () => history.push(settingsPath("ai")),
+      }),
       createActionWithChildren({
         name: t("Translate automatically on open"),
         section: ActiveDocumentSection,
@@ -256,6 +286,42 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           <span>{t("Structure out of sync")}</span>
           <RepairButton onClick={() => engine?.repair()}>
             {t("Repair")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {failedCount > 0 && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>
+            {t("{{count}} blocks failed to translate", { count: failedCount })}
+          </span>
+          <RepairButton
+            onClick={() => {
+              engine?.requeueFailed();
+              grammarExtension?.recheckAll();
+            }}
+          >
+            {t("Retry")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {grammarUnavailable && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>{t("Grammar service unavailable")}</span>
+          <RepairButton onClick={() => grammarExtension?.recheckAll()}>
+            {t("Retry")}
+          </RepairButton>
+        </WarningChip>
+      )}
+      {outdatedManual > 0 && (
+        <WarningChip>
+          <WarningIcon size={14} />
+          <span>
+            {t("{{count}} translations are outdated", { count: outdatedManual })}
+          </span>
+          <RepairButton onClick={() => engine?.retranslateOutdatedManual()}>
+            {t("Update")}
           </RepairButton>
         </WarningChip>
       )}

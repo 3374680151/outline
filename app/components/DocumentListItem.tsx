@@ -10,6 +10,7 @@ import EventBoundary from "@shared/components/EventBoundary";
 import Icon from "@shared/components/Icon";
 import { s, hover } from "@shared/styles";
 import type Document from "~/models/Document";
+import BilingualStore from "~/stores/BilingualStore";
 import Badge from "~/components/Badge";
 import { useModelSelection } from "~/components/ModelSelectionContext";
 import DocumentMeta from "~/components/DocumentMeta";
@@ -89,6 +90,7 @@ function DocumentListItem(props: Props) {
 
   // Multi-select is only offered for documents the user can update.
   const can = usePolicy(document.id);
+  const isBilingual = BilingualStore.bilingualDocIds.has(document.id);
   const selectable = !!selection && !!can.update;
   const isSelected = selection?.isSelected(document.id) ?? false;
   const isSelecting =
@@ -219,6 +221,11 @@ function DocumentListItem(props: Props) {
             />
             {document.isBadgedNew && document.createdBy?.id !== user.id && (
               <Badge yellow>{t("New")}</Badge>
+            )}
+            {isBilingual && (
+              <Tooltip content={t("Bilingual document")}>
+                <Badge>{t("Bilingual")}</Badge>
+              </Tooltip>
             )}
             {document.isDraft &&
               showDraft &&

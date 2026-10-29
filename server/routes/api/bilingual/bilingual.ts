@@ -119,7 +119,7 @@ router.post(
       includeState: false,
       includeViews: false,
       // createdById is required by the access filter for unattached drafts.
-      attributes: ["id", "title", "collectionId", "createdById"],
+      attributes: ["id", "title", "collectionId", "createdById", "icon", "color"],
     });
     const documentsById = new Map(documents.map((doc) => [doc.id, doc]));
 
@@ -133,6 +133,8 @@ router.post(
             documentsById.get(pair.targetDocumentId)?.title ?? "",
           sourceCollectionId:
             documentsById.get(pair.sourceDocumentId)?.collectionId ?? null,
+          sourceIcon: documentsById.get(pair.sourceDocumentId)?.icon ?? null,
+          sourceColor: documentsById.get(pair.sourceDocumentId)?.color ?? null,
         })),
       },
     };

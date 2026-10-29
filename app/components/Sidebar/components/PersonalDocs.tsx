@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import { DocumentIcon, PlusIcon } from "outline-icons";
+import { DocumentIcon, GlobeIcon, PlusIcon } from "outline-icons";
 import { useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
@@ -12,6 +12,7 @@ import { sortCollection } from "~/actions/definitions/collections";
 import { DocumentSection } from "~/actions/sections";
 import EditableTitle, { type RefHandle } from "~/components/EditableTitle";
 import Flex from "~/components/Flex";
+import { BilingualCreateForm } from "~/components/BilingualCreateDialog";
 import { ActionContextProvider } from "~/hooks/useActionContext";
 import useBoolean from "~/hooks/useBoolean";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
@@ -19,7 +20,9 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import { useSyncSidebarContext } from "~/hooks/useSyncSidebarContext";
-import { documentEditPath } from "~/utils/routeHelpers";
+import BilingualStore from "~/stores/BilingualStore";
+import { openBilingualRoute } from "~/utils/splitView";
+import { documentEditPath, documentPath } from "~/utils/routeHelpers";
 import CollectionLinkChildren from "./CollectionLinkChildren";
 import Header from "./Header";
 import Relative from "./Relative";
@@ -61,10 +64,57 @@ export const PersonalDocs = observer(function PersonalDocs() {
       }),
     [canCreate, setIsAddingNew]
   );
+  const { dialogs } = useStores();
+
+  const openBilingualDialog = useCallback(() => {
+    dialogs.openModal({
+      title: t("New bilingual document"),
+      content: (
+        <BilingualCreateForm
+          onSubmit={async (title, collectionIdValue) => {
+            const pair = await BilingualStore.createPair({
+              title,
+              collectionId: collectionIdValue ?? undefined,
+            });
+            // Canonical slug paths are required: raw ids would trigger the
+            // document scene's canonical replace, which sheds the bilingual
+            // and split parameters.
+            const [source, target] = await Promise.all([
+              documents.fetch(pair.sourceDocumentId),
+              documents.fetch(pair.targetDocumentId),
+            ]);
+            openBilingualRoute(
+              history,
+              documentPath(source),
+              documentPath(target)
+            );
+          }}
+        />
+      ),
+    });
+  }, [dialogs, t, history, documents]);
+
+  const newBilingualDocAction = useMemo(
+    () =>
+      createAction({
+        name: ({ t: translate }) => translate("New bilingual document"),
+        analyticsName: "New bilingual document",
+        section: DocumentSection,
+        icon: <GlobeIcon />,
+        keywords: "bilingual translate 中文 翻译 双语",
+        visible: canCreate,
+        perform: openBilingualDialog,
+      }),
+    [canCreate, openBilingualDialog]
+  );
+
   const hasCollection = !!collection;
   const headerActions = useMemo(
-    () => (hasCollection ? [newDocAction, sortCollection] : [newDocAction]),
-    [hasCollection, newDocAction]
+    () =>
+      hasCollection
+        ? [newDocAction, newBilingualDocAction, sortCollection]
+        : [newDocAction, newBilingualDocAction],
+    [hasCollection, newDocAction, newBilingualDocAction]
   );
   const activeModels = useMemo(
     () => (collection ? [collection] : undefined),
