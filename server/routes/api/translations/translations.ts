@@ -15,6 +15,7 @@ import {
   translateWithFallback,
 } from "@server/services/translation/registry";
 import { lookupWordWithAI } from "@server/services/translation/providers/openaiCompatible";
+import { lookupWord, wordCacheKey } from "@server/services/translation/wordDictionary";
 import { loadTeamTranslationConfig } from "@server/services/translation/teamConfig";
 import * as T from "./schema";
 
@@ -179,9 +180,7 @@ router.post(
   async (ctx: APIContext<T.TranslationsWordReq>) => {
     const { word, context, to } = ctx.input.body;
     const { user } = ctx.state.auth;
-    const cacheKey = `word-lookup:${to}:${createHash("sha256")
-      .update(`${word}|${context ?? ""}`)
-      .digest("hex")}`;
+    const cacheKey = wordCacheKey(`${word}|${context ?? ""}`, to);
 
     const cached = await CacheHelper.getData<Record<string, unknown>>(cacheKey);
 
@@ -190,7 +189,35 @@ router.post(
       return;
     }
 
-    let result: Record<string, unknown> | undefined;
+    // Three-tier lookup: local ECDICT dictionary first (no API key needed),
+    // then the team-configured AI dictionary, then plain translation fallback.
+    let result: Record<string, unknown>;
+
+    try {
+      const local = await lookupWord(word, "en", to);
+
+      if (local.found) {
+        result = {
+          available: true,
+          source: "ecdict",
+          entry: {
+            word: local.lemma ?? local.term,
+            ...(local.phonetic ? { phonetic: local.phonetic } : {}),
+            senses: local.senses.map((sense) => ({
+              pos: sense.pos,
+              meaning: sense.zh ?? sense.en ?? "",
+            })),
+            examples: [],
+          },
+          translation: local.translation,
+        };
+        await CacheHelper.setData(cacheKey, result, TRANSLATION_CACHE_TTL * 7);
+        ctx.body = { data: result };
+        return;
+      }
+    } catch (err) {
+      Logger.warn("translations.word ecdict lookup failed", { err });
+    }
 
     try {
       const team = await loadTeamTranslationConfig(user.teamId);
@@ -202,16 +229,22 @@ router.post(
       );
 
       if (entry) {
-        result = { available: true, entry };
+        result = { available: true, source: "ai", entry, translation: "" };
         await CacheHelper.setData(cacheKey, result, TRANSLATION_CACHE_TTL * 7);
+        ctx.body = { data: result };
+        return;
       }
     } catch (err) {
-      Logger.warn("translations.word failed", { err });
+      Logger.warn("translations.word ai lookup failed", { err });
     }
 
-    if (!result) {
-      // No AI provider configured or lookup failed – the client falls back
-      // to the plain translation card.
+    // Last tier: plain translation via the provider fallback chain.
+    try {
+      const results = await translateWithFallback([word], "en", to, new AbortController().signal);
+      result = { available: true, source: "mt-fallback", entry: null, translation: results.results[0] ?? "" };
+      await CacheHelper.setData(cacheKey, result, TRANSLATION_CACHE_TTL);
+    } catch (err) {
+      Logger.warn("translations.word mt fallback failed", { err });
       result = { available: false };
     }
 
