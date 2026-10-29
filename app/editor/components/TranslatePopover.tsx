@@ -108,7 +108,7 @@ export const TranslatePopover = observer(function TranslatePopover(
     return () => {
       cancelled = true;
     };
-  }, [text, providerId, t]);
+  }, [text, providerId, t, reloadToken]);
 
   React.useEffect(() => {
     // Word lookups also show the sentence's grammar issues inline.
