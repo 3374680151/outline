@@ -87,6 +87,18 @@ export function useBilingualPair(): BilingualPairContextValue {
  * secondary pane, owns the mirror engine while the view is open, and keeps
  * the mirror title in sync with the source title.
  */
+
+// Temporary diagnostics for the browser testing loop.
+function noteStrip(reason: string): void {
+  try {
+    const log = JSON.parse(sessionStorage.getItem("__stripLog") ?? "[]") as string[];
+    log.push(`${new Date().toISOString().slice(11, 19)} ${reason}`);
+    sessionStorage.setItem("__stripLog", JSON.stringify(log.slice(-10)));
+  } catch (_err) {
+    // ignore
+  }
+}
+
 export const BilingualPairProvider = observer(function BilingualPairProvider({
   children,
 }: {
