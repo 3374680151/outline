@@ -92,7 +92,7 @@ export const PersonalDocs = observer(function PersonalDocs() {
         />
       ),
     });
-  }, [dialogs, t, history]);
+  }, [dialogs, t, history, documents]);
 
   const newBilingualDocAction = useMemo(
     () =>
