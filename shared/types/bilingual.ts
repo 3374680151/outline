@@ -49,6 +49,20 @@ export interface BilingualPairDTO {
   updatedAt: string;
 }
 
+/** One row of the bilingual documents index. */
+export interface BilingualListRow extends BilingualPairDTO {
+  /** Title of the source document. */
+  sourceTitle: string;
+  /** Title of the mirror document. */
+  targetTitle: string;
+  /** Collection the source document lives in, when any. */
+  sourceCollectionId: string | null;
+  /** Icon of the source document. */
+  sourceIcon?: string | null;
+  /** Color of the source document. */
+  sourceColor?: string | null;
+}
+
 /** Payload for `bilingual.updateState`. */
 export interface BilingualUpdateStatePayload {
   /** The pair to update. */
