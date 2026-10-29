@@ -542,7 +542,12 @@ export class MirrorEngine {
       this.blockStates[i] = nextState;
       this.markDirty(i);
 
-      if (nextState.status === "empty" && translatable) {
+      // Re-translate blocks whose source changed, both untranslated ones and
+      // stale ones (the write path protects human mirror edits).
+      if (
+        (nextState.status === "empty" || nextState.status === "stale") &&
+        translatable
+      ) {
         this.translateQueue.add(i);
         queued = true;
       }
@@ -602,7 +607,8 @@ export class MirrorEngine {
         forced: this.forced.has(index),
       }));
       batch.forEach((item) => this.forced.delete(item.index));
-      const translatable = batch.filter((item) => item.text.trim().length > 0);
+      // Skip fragments produced mid-typing; a full sentence follows shortly.
+    const translatable = batch.filter((item) => item.text.trim().length >= 2);
 
       for (const item of translatable) {
         const state = this.blockStates[item.index] ?? emptyState();
@@ -1063,11 +1069,23 @@ export class MirrorEngine {
       return;
     }
 
+    // Apply the structural diff in up to three passes: each pass re-reads
+    // the live documents, so a partially applied pass (e.g. an insert whose
+    // node type could not be created) is corrected by the next one instead
+    // of leaving the mirror silently misaligned.
     const sourceSigs = viewBlockSignatures(sourceView);
-    const ops = diffTopLevelBlocks(viewBlockSignatures(targetView), sourceSigs);
+    let ops: ReturnType<typeof diffTopLevelBlocks> = [];
 
-    for (const op of ops) {
-      this.applyStructureOp(targetView, op);
+    for (let pass = 0; pass < 3; pass++) {
+      ops = diffTopLevelBlocks(viewBlockSignatures(targetView), sourceSigs);
+
+      if (ops.length === 0) {
+        break;
+      }
+
+      for (const op of ops) {
+        this.applyStructureOp(targetView, op);
+      }
     }
 
     const oldSize = this.blockStates.length;

@@ -21,6 +21,7 @@ import { useBilingualPair } from "~/components/BilingualPairProvider";
 import useStores from "~/hooks/useStores";
 import type Document from "~/models/Document";
 import BilingualStore from "~/stores/BilingualStore";
+import history from "~/utils/history";
 import {
   autoTranslateOnOpen,
   grammarCheckingEnabled,
@@ -45,7 +46,7 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 }) {
   const { t } = useTranslation();
   const { pair, engine, grammarExtension } = useBilingualPair();
-  const { dialogs, documents, policies } = useStores();
+  const { dialogs, documents, policies, collections } = useStores();
   const [saving, setSaving] = React.useState(false);
 
   const progress = engine?.progress ?? { translated: 0, total: 0 };
@@ -97,23 +98,41 @@ export const BilingualToolbar = observer(function BilingualToolbar({
         throw new Error("Mirror document unavailable");
       }
 
-      const collectionId = source?.collectionId ?? undefined;
+      // Follow the source's location when it has one; drafts without a
+      // collection land in the user's personal collection so the action
+      // always produces a document the user can find.
+      const collectionId = source?.collectionId ?? collections.personal?.id;
 
-      if (collectionId) {
-        await target.move({ collectionId });
+      if (!collectionId) {
+        throw new Error("No collection available");
       }
+
+      await target.move({ collectionId });
 
       if (source?.publishedAt) {
         await target.save(undefined, { publish: true });
       }
 
-      toast.success(t("Mirror saved as a standalone document"));
+      toast.success(t("Mirror saved as a standalone document"), {
+        action: {
+          label: t("Open"),
+          onClick: () => {
+            void (async () => {
+              const moved = documents.get(pair.targetDocumentId);
+              if (moved) {
+                const { documentPath } = await import("~/utils/routeHelpers");
+                history.push(documentPath(moved));
+              }
+            })();
+          },
+        },
+      });
     } catch (_err) {
       toast.error(t("Could not save the mirror document"));
     } finally {
       setSaving(false);
     }
-  }, [pair, saving, documents, t]);
+  }, [pair, saving, documents, collections, t]);
 
   const handleCopySource = React.useCallback(() => {
     dialogs.openModal({
