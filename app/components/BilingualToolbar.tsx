@@ -22,6 +22,7 @@ import useStores from "~/hooks/useStores";
 import type Document from "~/models/Document";
 import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
+import { settingsPath } from "~/utils/routeHelpers";
 import {
   autoTranslateOnOpen,
   grammarCheckingEnabled,
@@ -240,6 +241,12 @@ export const BilingualToolbar = observer(function BilingualToolbar({
             perform: () => setGrammarLevel("picky"),
           }),
         ],
+      }),
+      createAction({
+        name: t("Translation & grammar services…"),
+        section: ActiveDocumentSection,
+        icon: <SettingsIcon />,
+        perform: () => history.push(settingsPath("ai")),
       }),
       createActionWithChildren({
         name: t("Translate automatically on open"),

@@ -132,6 +132,12 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
   const can = usePolicy(primaryDocument);
   React.useEffect(() => {
     migrateLegacyPreferences();
+
+    // Warm the pair index once per session so bilingual documents can be
+    // badged everywhere without a lookup, and the index page opens instantly.
+    void BilingualStore.listPairs().catch(() => {
+      // Not signed in yet, or the module is disabled – badges simply stay off.
+    });
   }, [user?.id]);
 
   // Resolve the pair for the primary document while the flag is set. When
