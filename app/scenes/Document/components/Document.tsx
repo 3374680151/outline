@@ -17,6 +17,7 @@ import parseDocumentSlug from "@shared/utils/parseDocumentSlug";
 import type Document from "~/models/Document";
 import type Revision from "~/models/Revision";
 import { useDocumentContext } from "~/components/DocumentContext";
+import BilingualMobileBanner from "~/components/BilingualMobileBanner";
 import { useSplitView } from "~/components/SplitView/context";
 import DocumentMove from "~/components/DocumentExplorer/DocumentMove";
 import DocumentPublish from "~/scenes/DocumentPublish";
@@ -428,6 +429,7 @@ function DocumentScene({
               onSave={onSave}
             />
           )}
+          <BilingualMobileBanner document={document} />
           <Main
             fullWidth={document.fullWidth}
             tocPosition={tocPos}
