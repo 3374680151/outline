@@ -15,6 +15,7 @@ import {
   isSplittablePath,
   openRouteInSplit,
   setBilingualFlag,
+  setFocusedSplitPane,
   setSplitPath,
 } from "./splitView";
 
@@ -90,13 +91,55 @@ function applySplitView(
     return descriptor;
   }
 
+  // The bilingual view must be handled before the focused-pane rule below:
+  // otherwise any navigation made after the user touched the mirror pane is
+  // routed into that pane, leaving the source document on the left and an
+  // unrelated document on the right with the bilingual flag stripped.
+  if (isBilingualView(current.search)) {
+    const withinPair =
+      pathname === current.pathname ||
+      parsePath(currentSplit).pathname === pathname;
+
+    if (!withinPair) {
+      // The pair is a single unit: a destination outside of it is a
+      // deliberate jump out of the bilingual mode, so the target opens full
+      // width instead of being paired with a document it has no relation to.
+      setFocusedSplitPane("primary");
+      return {
+        ...descriptor,
+        search: setBilingualFlag(
+          setSplitPath(descriptor.search ?? "", undefined),
+          false
+        ),
+      };
+    }
+
+    if (!isReplace && getFocusedSplitPane() === "secondary") {
+      // A link between the two sides of the pair keeps the bilingual mode and
+      // stays in the pane that has focus.
+      return patchLocation(current, {
+        search: setSplitPath(
+          current.search,
+          createPath({
+            pathname,
+            search: descriptor.search,
+            hash: descriptor.hash,
+          })
+        ),
+      });
+    }
+
+    return {
+      ...descriptor,
+      search: setSplitPath(descriptor.search ?? "", currentSplit),
+    };
+  }
+
   if (!isReplace && getFocusedSplitPane() === "secondary") {
-    // Navigation from within the secondary pane stays in the pane. The
-    // bilingual flag does not survive: the toolbar and mirror semantics
-    // belong to the primary pane's pair.
+    // Navigation from within the secondary pane stays in the pane.
     return patchLocation(current, {
       search: setSplitPath(
-        setBilingualFlag(current.search, false),
+        current.search,
         createPath({
           pathname,
           search: descriptor.search,
@@ -104,18 +147,6 @@ function applySplitView(
         })
       ),
     });
-  }
-
-  // In the bilingual view the user works on the pair as a single unit:
-  // navigating the primary pane to anything else is a deliberate jump out
-  // of the bilingual mode, so the destination opens full width instead of
-  // carrying the split along and showing two unrelated documents side by
-  // side.
-  if (isBilingualView(current.search)) {
-    return {
-      ...descriptor,
-      search: setBilingualFlag(setSplitPath(descriptor.search ?? "", undefined), false),
-    };
   }
 
   return {
