@@ -72,9 +72,18 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 
     try {
       const source = documents.get(pair.sourceDocumentId);
+      const baseTitle =
+        (document.title || source?.title || t("Untitled")).trim();
+      // The merged document is titled after the source. A suffix marks it as a
+      // derived copy, but it is only added when the title does not already say
+      // so – otherwise repeated saves keep stacking the suffix.
+      const suffix = t("Bilingual");
+      const marked = [suffix, "Bilingual", "双语", "雙語"].some((marker) =>
+        baseTitle.includes(marker)
+      );
       const created = await BilingualStore.saveMerged({
         pairId: pair.id,
-        title: `${source?.title ?? t("Untitled")}（双语）`,
+        title: marked ? baseTitle : `${baseTitle} (${suffix})`,
         collectionId: source?.collectionId ?? undefined,
         publish: false,
       });
@@ -86,7 +95,7 @@ export const BilingualToolbar = observer(function BilingualToolbar({
     } finally {
       setSaving(false);
     }
-  }, [pair, saving, documents, t]);
+  }, [pair, saving, documents, document, t]);
 
   const handlePromoteTarget = React.useCallback(async () => {
     if (!pair || saving) {

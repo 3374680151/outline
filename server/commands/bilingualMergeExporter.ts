@@ -1,4 +1,5 @@
 import type { ProsemirrorData, ProsemirrorDoc } from "@shared/types";
+import type { BilingualBlockState } from "@shared/types/bilingual";
 import type BilingualPair from "@server/models/BilingualPair";
 import { Document } from "@server/models";
 import { authorize } from "@server/policies";
@@ -63,18 +64,45 @@ function translationBlock(text: string): PMNode | null {
 }
 
 /**
+ * Returns the translation recorded for a block in the pair state, ignoring
+ * states that never produced text.
+ *
+ * @param state The persisted state of the block, if any.
+ * @returns The translated text, or an empty string.
+ */
+function translationFromState(state?: BilingualBlockState): string {
+  if (!state || !state.autoText) {
+    return "";
+  }
+
+  if (state.status === "failed" || state.status === "skipped") {
+    return "";
+  }
+
+  return state.autoText.trim();
+}
+
+/**
  * Interleaves the source and mirror documents into one bilingual document:
  * every source block is followed by its translated block rendered as a
  * blockquote. Blocks without a translation are passed through unchanged and
  * non-text blocks (images, code, tables) are never duplicated.
  *
+ * The mirror document is edited collaboratively, so its persisted content
+ * lags the live editor by the collaboration store debounce. The per-block
+ * translation state is written by the same editor and is used as a fallback
+ * so that saving immediately after translating does not silently drop the
+ * newest translations.
+ *
  * @param source The source document content.
  * @param target The mirror document content.
+ * @param blockStates Index-parallel translation state of the pair.
  * @returns The merged document content.
  */
 export function mergeBilingualContent(
   source: ProsemirrorData | null,
-  target: ProsemirrorData | null
+  target: ProsemirrorData | null,
+  blockStates: BilingualBlockState[] = []
 ): ProsemirrorDoc {
   const sourceChildren = ((source as ProsemirrorDoc | null)?.content ??
     []) as unknown as PMNode[];
@@ -85,17 +113,25 @@ export function mergeBilingualContent(
     const sourceBlock = sourceChildren[i];
     children.push(sourceBlock);
 
-    const targetBlock = targetChildren[i];
-
-    if (!targetBlock) {
+    // An empty source block has nothing to translate, and pairing it would
+    // attach the translation of a neighbouring block to it.
+    if (!textOf(sourceBlock).trim()) {
       continue;
     }
 
     const mirrorable =
       sourceBlock.type === "paragraph" || sourceBlock.type === "heading";
-    const text = textOf(targetBlock).trim();
 
-    if (!mirrorable || !text) {
+    if (!mirrorable) {
+      continue;
+    }
+
+    const targetBlock = targetChildren[i];
+    const text =
+      (targetBlock ? textOf(targetBlock).trim() : "") ||
+      translationFromState(blockStates[i]);
+
+    if (!text) {
       continue;
     }
 
@@ -139,7 +175,11 @@ export default async function bilingualMergeExporter(
     rejectOnEmpty: false,
   });
 
-  const merged = mergeBilingualContent(source.content, target?.content ?? null);
+  const merged = mergeBilingualContent(
+    source.content,
+    target?.content ?? null,
+    pair.blockStates ?? []
+  );
 
   return documentCreator(ctx, {
     title: props.title ?? source.title,
