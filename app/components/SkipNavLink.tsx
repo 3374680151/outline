@@ -1,9 +1,12 @@
+import * as React from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { depths, s } from "@shared/styles";
 import { id } from "~/components/SkipNavContent";
 
 export default function SkipNavLink() {
-  return <Anchor href={`#${id}`}>Skip navigation</Anchor>;
+  const { t } = useTranslation();
+  return <Anchor href={`#${id}`}>{t("Skip navigation")}</Anchor>;
 }
 
 const Anchor = styled.a`
