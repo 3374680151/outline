@@ -236,3 +236,53 @@ export function setAutoTranslateOnOpen(enabled: boolean): void {
   bumpPrefsVersion();
   scheduleUserSave();
 }
+
+const TRANSLATION_TARGET_LANG_KEY = "bilingual-translation-target-lang";
+const TRANSLATION_PROVIDER_KEY = "bilingual-translation-provider";
+
+/** Common target languages offered in the translate card. */
+export const TRANSLATION_TARGET_LANGS: ReadonlyArray<{ code: string; label: string }> = [
+  { code: "zh", label: "中文" },
+  { code: "en", label: "English" },
+  { code: "ja", label: "日本語" },
+  { code: "ko", label: "한국어" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+  { code: "es", label: "Español" },
+];
+
+/**
+ * Reads the persisted target language for the translate card.
+ *
+ * @returns The target language code, "zh" by default.
+ */
+export function translationTargetLang(): string {
+  return localStorage.getItem(TRANSLATION_TARGET_LANG_KEY) || "zh";
+}
+
+/**
+ * Persists the target language for the translate card.
+ *
+ * @param lang The target language code.
+ */
+export function setTranslationTargetLang(lang: string): void {
+  localStorage.setItem(TRANSLATION_TARGET_LANG_KEY, lang);
+}
+
+/**
+ * Reads the persisted translation provider id ("", automatic).
+ *
+ * @returns The provider id, or "" for the automatic fallback chain.
+ */
+export function translationProviderId(): string {
+  return localStorage.getItem(TRANSLATION_PROVIDER_KEY) ?? "";
+}
+
+/**
+ * Persists the translation provider selection.
+ *
+ * @param providerId The provider id, or "" for automatic.
+ */
+export function setTranslationProviderId(providerId: string): void {
+  localStorage.setItem(TRANSLATION_PROVIDER_KEY, providerId);
+}

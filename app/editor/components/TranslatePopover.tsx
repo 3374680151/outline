@@ -7,7 +7,14 @@ import type { GrammarMatchDTO, WordLookupDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
 import { settingsPath } from "~/utils/routeHelpers";
-import { grammarLevel } from "~/utils/bilingual/prefs";
+import {
+  grammarLevel,
+  translationTargetLang,
+  setTranslationTargetLang,
+  TRANSLATION_TARGET_LANGS,
+  translationProviderId,
+  setTranslationProviderId,
+} from "~/utils/bilingual/prefs";
 import { GRAMMAR_TYPE_COLOR, matchType, type GrammarType } from "~/utils/bilingual/matchType";
 import { clampPanelPosition } from "~/utils/bilingual/overlay";
 
@@ -89,9 +96,10 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [providers, setProviders] = React.useState<
     { id: string; label: string; configured: boolean }[]
   >([]);
-  const [providerId, setProviderId] = React.useState<string>(() =>
-    localStorage.getItem(PROVIDER_KEY) ?? ""
+  const [providerId, setProviderId] = React.useState<string>(
+    () => translationProviderId() || localStorage.getItem(PROVIDER_KEY) || ""
   );
+  const [to, setTo] = React.useState<string>(() => translationTargetLang());
   const [copied, setCopied] = React.useState(false);
   const [reloadToken, setReloadToken] = React.useState(0);
   const [grammarMatches, setGrammarMatches] = React.useState<
@@ -132,7 +140,7 @@ export const TranslatePopover = observer(function TranslatePopover(
         let translated: string[];
         try {
           translated = await withTimeout(
-            BilingualStore.translate([text], "zh", providerId || undefined),
+            BilingualStore.translate([text], to, providerId || undefined),
             TRANSLATE_TIMEOUT_MS
           );
         } catch (err) {
@@ -142,9 +150,9 @@ export const TranslatePopover = observer(function TranslatePopover(
             throw err;
           }
           setProviderId("");
-          localStorage.removeItem(PROVIDER_KEY);
+          setTranslationProviderId("");
           translated = await withTimeout(
-            BilingualStore.translate([text], "zh", undefined),
+            BilingualStore.translate([text], to, undefined),
             TRANSLATE_TIMEOUT_MS
           );
         }
@@ -170,7 +178,7 @@ export const TranslatePopover = observer(function TranslatePopover(
     return () => {
       cancelled = true;
     };
-  }, [text, providerId, t, reloadToken]);
+  }, [text, providerId, to, t, reloadToken]);
 
   React.useEffect(() => {
     // Word lookups also show the sentence's grammar issues inline.
@@ -322,12 +330,26 @@ export const TranslatePopover = observer(function TranslatePopover(
         <LangLabel>
           {t("Source")} · {isWord ? t("Word") : t("Detected English")}
         </LangLabel>
+        <TargetLangSelect
+          onChange={(event) => {
+            setTranslationTargetLang(event.currentTarget.value);
+            setTo(event.currentTarget.value);
+          }}
+          aria-label={t("Target language")}
+          value={to}
+        >
+          {TRANSLATION_TARGET_LANGS.map((lang) => (
+            <option key={lang.code} value={lang.code}>
+              {lang.label}
+            </option>
+          ))}
+        </TargetLangSelect>
         {providers.length > 0 && (
           <ServiceSelect
             onChange={(event) => {
               const value = event.currentTarget.value;
               setProviderId(value);
-              localStorage.setItem(PROVIDER_KEY, value);
+              setTranslationProviderId(value);
             }}
             aria-label={t("Translation service")}
             value={providerId}
@@ -463,6 +485,15 @@ const LangLabel = styled.span`
   color: ${s("textSecondary")};
   font-size: 12px;
   flex: 1;
+`;
+
+const TargetLangSelect = styled.select`
+  background: ${s("backgroundSecondary")};
+  color: ${s("text")};
+  border: 1px solid ${s("divider")};
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 4px;
 `;
 
 const ServiceSelect = styled.select`
