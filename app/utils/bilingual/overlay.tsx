@@ -57,9 +57,11 @@ export function mountReactOverlay(zIndex: number): ReactOverlay {
 export const VIEWPORT_INSET = 12;
 
 /**
- * Clamps a floating panel position into the visual viewport, preferring the
- * placement above the anchor when there is room (the FluentRead popup
- * algorithm).
+ * Clamps a floating panel position into the visual viewport.
+ *
+ * The panel is placed below the anchor when it fits, which keeps it clear of
+ * the document header and title. It only flips above when there is not enough
+ * room underneath and more room above, so the placement stays predictable.
  *
  * @param anchor The anchor rect to place the panel against.
  * @param size The panel size.
@@ -73,7 +75,12 @@ export function clampPanelPosition(
 ): { left: number; top: number; above: boolean } {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const above = anchor.top - gap - size.height > VIEWPORT_INSET;
+
+  const spaceBelow =
+    viewportHeight - VIEWPORT_INSET - anchor.bottom - gap;
+  const spaceAbove = anchor.top - gap - VIEWPORT_INSET;
+  const above = spaceBelow < size.height && spaceAbove > spaceBelow;
+
   const top = above
     ? Math.max(VIEWPORT_INSET, anchor.top - gap - size.height)
     : Math.min(

@@ -20,6 +20,36 @@ const POPOVER_ESTIMATED_HEIGHT = 220;
 /** localStorage key remembering the translation service chosen in the card. */
 const PROVIDER_KEY = "bilingual-translation-provider";
 
+/** How long to wait for a translation before offering a retry. */
+const TRANSLATE_TIMEOUT_MS = 20000;
+
+/**
+ * Rejects when the given promise does not settle in time, so that a stalled
+ * request can never leave the card showing "Translating…" indefinitely.
+ *
+ * @param promise The promise to await.
+ * @param ms The timeout in milliseconds.
+ * @returns The promise result.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Translation timed out")),
+      ms
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 /**
  * Props for the translation popover.
  */
@@ -55,6 +85,7 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [result, setResult] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [noProvider, setNoProvider] = React.useState(false);
   const [providers, setProviders] = React.useState<
     { id: string; label: string; configured: boolean }[]
   >([]);
@@ -76,22 +107,53 @@ export const TranslatePopover = observer(function TranslatePopover(
     async function run() {
       setLoading(true);
       setError(null);
+      setNoProvider(false);
 
       try {
-        const providersPromise = BilingualStore.fetchProviders();
-        const translated = await BilingualStore.translate(
-          [text],
-          "zh",
-          providerId || undefined
+        // Resolve the available services first: without a configured provider
+        // the card must explain what to do instead of issuing a request that
+        // is guaranteed to fail.
+        const configured = (await BilingualStore.fetchProviders()).filter(
+          (provider) => provider.configured
         );
-        const configuredProviders = await providersPromise;
+
+        if (cancelled) {
+          return;
+        }
+
+        setProviders(configured);
+
+        if (configured.length === 0) {
+          setNoProvider(true);
+          setLoading(false);
+          return;
+        }
+
+        let translated: string[];
+        try {
+          translated = await withTimeout(
+            BilingualStore.translate([text], "zh", providerId || undefined),
+            TRANSLATE_TIMEOUT_MS
+          );
+        } catch (err) {
+          // A remembered service may have been removed or its credentials may
+          // have been cleared; fall back to the automatic choice once.
+          if (!providerId) {
+            throw err;
+          }
+          setProviderId("");
+          localStorage.removeItem(PROVIDER_KEY);
+          translated = await withTimeout(
+            BilingualStore.translate([text], "zh", undefined),
+            TRANSLATE_TIMEOUT_MS
+          );
+        }
 
         if (cancelled) {
           return;
         }
 
         setResult(translated[0]);
-        setProviders(configuredProviders.filter((provider) => provider.configured));
       } catch (_err) {
         if (!cancelled) {
           setError(t("Translation failed"));
@@ -175,14 +237,29 @@ export const TranslatePopover = observer(function TranslatePopover(
   }, [isWord, sentence, text]);
 
   React.useEffect(() => {
-    // Measure after first paint so the clamp uses the real size.
-    const rect = containerRef.current?.getBoundingClientRect();
-    const size = {
-      width: rect?.width ?? POPOVER_WIDTH,
-      height: rect?.height ?? POPOVER_ESTIMATED_HEIGHT,
+    // Measure after first paint so the clamp uses the real size, and keep
+    // re-measuring while the card grows (dictionary and grammar sections are
+    // appended after the translation arrives).
+    const measure = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      const size = {
+        width: rect?.width ?? POPOVER_WIDTH,
+        height: rect?.height ?? POPOVER_ESTIMATED_HEIGHT,
+      };
+      setPosition(clampPanelPosition(anchor, size));
     };
-    setPosition(clampPanelPosition(anchor, size));
-  }, [anchor, loading, result]);
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined" || !containerRef.current) {
+      return;
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [anchor, loading, result, noProvider, dictEntry, grammarMatches.length]);
 
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -245,16 +322,6 @@ export const TranslatePopover = observer(function TranslatePopover(
         <LangLabel>
           {t("Source")} · {isWord ? t("Word") : t("Detected English")}
         </LangLabel>
-        {providers.length === 0 && (
-          <NoProviderLink
-            onClick={() => {
-              onClose();
-              history.push(settingsPath("ai"));
-            }}
-          >
-            {t("No translation service configured — open settings")}
-          </NoProviderLink>
-        )}
         {providers.length > 0 && (
           <ServiceSelect
             onChange={(event) => {
@@ -279,7 +346,24 @@ export const TranslatePopover = observer(function TranslatePopover(
       </Header>
       <Original>{text}</Original>
       <Result>
-        {loading ? (
+        {noProvider ? (
+          <EmptyState>
+            <EmptyTitle>{t("No translation service configured")}</EmptyTitle>
+            <EmptyHint>
+              {t(
+                "Add an API key for a translation service to translate text while you write."
+              )}
+            </EmptyHint>
+            <ConfigureButton
+              onClick={() => {
+                onClose();
+                history.push(settingsPath("ai"));
+              }}
+            >
+              {t("Open translation settings")}
+            </ConfigureButton>
+          </EmptyState>
+        ) : loading ? (
           <LoadingDots>{t("Translating…")}</LoadingDots>
         ) : error ? (
           <ErrorRow>
@@ -522,17 +606,35 @@ const ActionButton = styled.button<{ $primary?: boolean }>`
 
 export default TranslatePopover;
 
-const NoProviderLink = styled.button`
-  background: none;
+const EmptyState = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: ${s("backgroundSecondary")};
+  border-radius: 6px;
+`;
+
+const EmptyTitle = styled.div`
+  font-size: 13px;
+  font-weight: 600;
+`;
+
+const EmptyHint = styled.div`
+  font-size: 12px;
+  color: ${s("textSecondary")};
+  line-height: 1.5;
+`;
+
+const ConfigureButton = styled.button`
+  align-self: flex-start;
+  background: ${s("accent")};
+  color: ${s("accentText")};
   border: none;
-  color: ${s("accent")};
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 11.5px;
-  padding: 2px 4px;
-  white-space: nowrap;
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
+  padding: 4px 10px;
 `;
 
 const ErrorRow = styled.div`
