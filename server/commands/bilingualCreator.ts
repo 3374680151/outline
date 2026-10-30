@@ -71,6 +71,7 @@ export default async function bilingualCreator(
     title: source.title,
     language: "zh",
     publish: false,
+    bilingualMirror: true,
   });
 
   const pair = await BilingualPair.create(

@@ -86,6 +86,7 @@ async function presentDocument(
     collaboratorIds: [],
     revision: document.revisionCount,
     fullWidth: document.fullWidth,
+    bilingualMirror: document.bilingualMirror,
     preferences: document.preferences,
     collectionId: undefined,
     parentDocumentId: undefined,

@@ -29,6 +29,7 @@ type Props = Optional<
     | "editorVersion"
     | "language"
     | "publishedAt"
+    | "bilingualMirror"
     | "createdAt"
     | "updatedAt"
     | "createdById"
@@ -183,6 +184,7 @@ export default async function documentCreator(
     editorVersion,
     language,
     publishedAt,
+    bilingualMirror,
     sourceMetadata,
     createdById,
     lastModifiedById,
@@ -251,6 +253,7 @@ export default async function documentCreator(
     icon: icon ?? template?.icon,
     color: color ?? template?.color,
     language,
+    bilingualMirror,
     title: titleWithReplacements,
     content: contentWithReplacements,
     state,

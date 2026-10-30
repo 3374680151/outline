@@ -378,6 +378,15 @@ class Document extends ArchivableModel<
   @Column(DataType.BOOLEAN)
   template: boolean;
 
+  /**
+   * Whether this document is the mirror half of a bilingual pair. Mirrors are
+   * editing companions of their source document and are hidden from the
+   * global document lists.
+   */
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  bilingualMirror: boolean;
+
   @Column(DataType.BOOLEAN)
   insightsEnabled: boolean;
 

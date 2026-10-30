@@ -175,6 +175,15 @@ export default class Document extends ArchivableModel implements Searchable {
   fullWidth: boolean;
 
   /**
+   * Whether this document is the mirror half of a bilingual pair. Mirrors are
+   * editing companions of their source document and are kept out of the
+   * document lists such as recently viewed and recently updated.
+   */
+  @Field
+  @observable
+  bilingualMirror = false;
+
+  /**
    * Display preferences for the document.
    */
   @Field

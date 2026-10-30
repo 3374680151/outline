@@ -224,6 +224,10 @@ router.post(
       [Op.and]: WhereOptions<Document>[];
     } = {
       teamId: user.teamId,
+      // Mirror documents back the translation pane of a bilingual pair. They
+      // are editing companions of their source document, not documents the
+      // user browses, so they never appear in a list.
+      bilingualMirror: false,
       [Op.and]: [
         {
           deletedAt: {
@@ -1368,7 +1372,13 @@ router.post(
       });
     }
 
-    const { results, total } = response;
+    const { total } = response;
+    // Mirror documents back the translation pane of a bilingual pair and are
+    // never a search result in their own right.
+    const results = response.results.filter(
+      (result) => !result.document.bilingualMirror
+    );
+    const hidden = response.results.length - results.length;
     const documents = results.map((result) => result.document);
 
     const data = await Promise.all(
@@ -1400,7 +1410,10 @@ router.post(
     }
 
     ctx.body = {
-      pagination: { ...ctx.state.pagination, total },
+      pagination: {
+        ...ctx.state.pagination,
+        total: Math.max(0, total - hidden),
+      },
       data,
       policies: user ? presentPolicies(user, documents) : null,
     };

@@ -105,10 +105,20 @@ export default class DocumentsStore extends Store<Document> {
     return this.orderedData.filter((d) => !d.archivedAt && !d.deletedAt);
   }
 
+  /**
+   * Documents that the user browses in lists. Mirror documents of a bilingual
+   * pair are editing companions of their source document and are excluded so
+   * that every bilingual document does not appear twice.
+   */
+  @computed
+  get browsable(): Document[] {
+    return this.all.filter((d) => !d.bilingualMirror);
+  }
+
   @computed
   get recentlyViewed(): Document[] {
     return orderBy(
-      this.all.filter((d) => d.lastViewedAt),
+      this.browsable.filter((d) => d.lastViewedAt),
       "lastViewedAt",
       "desc"
     );
@@ -116,12 +126,12 @@ export default class DocumentsStore extends Store<Document> {
 
   @computed
   get recentlyUpdated(): Document[] {
-    return orderBy(this.all, "updatedAt", "desc");
+    return orderBy(this.browsable, "updatedAt", "desc");
   }
 
   @computed
   get popular(): Document[] {
-    return orderBy(this.all, "popularityScore", "desc");
+    return orderBy(this.browsable, "popularityScore", "desc");
   }
 
   /**
@@ -844,7 +854,7 @@ export default class DocumentsStore extends Store<Document> {
       userId: string | undefined
     ): Document[] => {
       let deleted = orderBy(this.orderedData, "deletedAt", "desc").filter(
-        (d) => d.deletedAt
+        (d) => d.deletedAt && !d.bilingualMirror
       );
 
       if (userId) {
@@ -871,7 +881,7 @@ export default class DocumentsStore extends Store<Document> {
       dateFilter: DateFilter | undefined,
       collectionId: string | undefined
     ): Document[] => {
-      let drafts = orderBy(this.all, "updatedAt", "desc").filter(
+      let drafts = orderBy(this.browsable, "updatedAt", "desc").filter(
         (doc) => !doc.publishedAt
       );
 
