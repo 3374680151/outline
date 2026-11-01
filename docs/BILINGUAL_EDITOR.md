@@ -341,7 +341,7 @@ BilingualScene 挂载时 + 每 30s：比对 EN/CN 顶层块数与类型序列。
 
 ### 7.1 客户端交互规格
 
-**触发 A：选区翻译（默认开启）**
+**触发 A：选区翻译（默认关闭，通过文档头部全局开关或设置开启）**
 - 选区"落定"后 250ms（FluentRead 的 settle 延迟 + 版本化定时器），在选区末行边缘出现 **8px 圆点**（触屏保持 44px 命中区，视觉仍是 8px——FluentRead 用 `::after` 画点的做法）。
 - 定位：正向前选取取**最后一个 clientRect** 的右缘外 14px、`rect.bottom` 对齐；反向选取取首行左缘；钳制在视口内（安全边距 14px，触屏 28px）。坐标来源用 ProseMirror `view.coordsAtPos(selection.to)`（比 DOM Selection 更贴近编辑器坐标系）。
 - 点击圆点 → `TranslatePopover`。

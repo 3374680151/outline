@@ -123,13 +123,13 @@ export function migrateLegacyPreferences(): void {
 /**
  * Reads the translation trigger mode.
  *
- * @returns The configured trigger mode, "dot" (a button next to the
- *   selection) by default, matching the selection translate default.
+ * @returns The configured trigger mode, "off" by default — editing assists
+ *   stay off until the user enables them from the document header toggles.
  */
 export function translationTrigger(): TranslationTriggerMode {
   const user = currentUser();
   return (user?.getPreference(UserPreference.BilingualTranslationTrigger) ??
-    "dot") as TranslationTriggerMode;
+    "off") as TranslationTriggerMode;
 }
 
 /**
