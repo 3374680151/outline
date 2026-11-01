@@ -126,7 +126,9 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.SortCommentsByOrderInDocument]: true,
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
-  [UserPreference.BilingualTranslationTrigger]: "off" as const,
+  // Selection translate is on by default (design: docs/BILINGUAL_EDITOR.md
+  // "触发 A：选区翻译（默认开启）"); the team-level default mirrors this.
+  [UserPreference.BilingualTranslationTrigger]: "dot" as const,
   [UserPreference.BilingualGrammarChecking]: false,
   [UserPreference.BilingualGrammarLevel]: "default" as const,
   [UserPreference.BilingualGrammarIgnoredRules]: [],

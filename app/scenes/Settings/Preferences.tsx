@@ -22,6 +22,7 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import UserDelete from "../UserDelete";
+import { translationTrigger } from "~/utils/bilingual/prefs";
 import { AutoLaunchSetting } from "./components/AutoLaunchSetting";
 import SettingRow from "./components/SettingRow";
 
@@ -307,7 +308,7 @@ function Preferences() {
         border
       >
         <InputSelect
-          value={user.getPreference(UserPreference.BilingualTranslationTrigger)}
+          value={translationTrigger()}
           options={
             [
               { type: "item", label: t("Off"), value: "off" },

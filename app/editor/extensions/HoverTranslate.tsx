@@ -54,6 +54,13 @@ interface DotAnchor {
 const SELECTION_DELAY_MS = 120;
 
 /**
+ * Window during which a collapsed selection is treated as transient before
+ * the dot is dropped, in milliseconds. Ported from the FluentRead selection
+ * translator, which never trusts a single selectionchange to mean "gone".
+ */
+const SELECTION_LOSS_GRACE_MS = 160;
+
+/**
  * Window during which a selection change right after a press on the dot is
  * ignored, in milliseconds. Some browsers still clear the selection on a
  * press over body-level UI despite a prevented default; without the guard
@@ -83,6 +90,11 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
     left: number;
     top: number;
     anchor: DotAnchor;
+    /** Document position the dot is anchored to, for scroll repositioning. */
+    anchorPos: number;
+    /** Selection range the dot was built from, undefined for hover dots. */
+    selectionFrom?: number;
+    selectionTo?: number;
     text: string;
     blockIndex: number;
     isWord: boolean;
@@ -91,11 +103,13 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
 
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   private selectionTimer: ReturnType<typeof setTimeout> | null = null;
+  private selectionLossTimer: ReturnType<typeof setTimeout> | null = null;
   private dotOverlay: ReactOverlay | null = null;
   private toolbarRequestDisposer: (() => void) | null = null;
   private peekOverlay: ReactOverlay | null = null;
   private popoverOverlay: ReactOverlay | null = null;
   private rafHandle = 0;
+  private scrollRaf = 0;
   private lastMouseEvent: MouseEvent | null = null;
   private dotPointerDownAt = 0;
 
@@ -150,7 +164,15 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
 
               return false;
             }),
+            // Leaving the editor only ends a hover session; the selection
+            // dot is never dismissed by pointer movement, matching
+            // FluentRead where the indicator stays until explicitly
+            // dismissed or replaced by another selection.
             mouseleave: action(() => {
+              if (this.mode !== "hover") {
+                return false;
+              }
+
               this.scheduleHoverHide();
               return false;
             }),
@@ -158,16 +180,63 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
         },
         view: () => {
           const handleScroll = action(() => {
-            // The anchor is frozen once shown; hide on scroll rather than
-            // risk pointing at the wrong text. Capture phase is required:
-            // the scrolling container is an ancestor of the editor, and
-            // scroll events do not bubble.
-            this.hideDot();
+            // Reposition instead of hiding: FluentRead keeps the indicator
+            // attached to its anchor while the page scrolls and only drops
+            // it once the anchor leaves the visible pane. Capture phase is
+            // required: the scrolling container is an ancestor of the
+            // editor, and scroll events do not bubble.
+            if (!this.dot || this.popoverOverlay || this.scrollRaf) {
+              return;
+            }
+
+            this.scrollRaf = window.requestAnimationFrame(
+              this.repositionAnchor
+            );
           });
+
+          const handlePointerDown = (event: PointerEvent) => {
+            if (!this.dot && !this.peekOverlay) {
+              return;
+            }
+
+            if (this.popoverOverlay) {
+              return;
+            }
+
+            const { target } = event;
+
+            if (target instanceof Node) {
+              if (this.dotOverlay?.container.contains(target)) {
+                return;
+              }
+
+              if (this.peekOverlay?.container.contains(target)) {
+                return;
+              }
+            }
+
+            this.hideDot();
+          };
+
+          const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape" || this.popoverOverlay) {
+              return;
+            }
+
+            if (this.dot || this.peekOverlay) {
+              this.hideDot();
+            }
+          };
 
           document.addEventListener("scroll", handleScroll, {
             capture: true,
             passive: true,
+          });
+          document.addEventListener("pointerdown", handlePointerDown, {
+            capture: true,
+          });
+          document.addEventListener("keydown", handleKeyDown, {
+            capture: true,
           });
 
           // Both panes listen: the pane side is often unknown at mount
@@ -187,28 +256,95 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
 
           return {
             update: (view, prevState) => {
-              if (!view.state.selection.eq(prevState.selection)) {
-                // A press on the dot can briefly clear the selection before
-                // the click fires; ignore that window so the dot is not
-                // removed under the cursor.
-                if (Date.now() - this.dotPointerDownAt < DOT_PRESS_GUARD_MS) {
-                  return;
-                }
+              // An open card owns its state: FluentRead keeps an explicitly
+              // opened card alive regardless of selection churn while it is
+              // visible.
+              if (this.popoverOverlay) {
+                return;
+              }
 
-                this.hideDot();
+              // Editing invalidates the anchor: the dot may point at
+              // different text after the document changes.
+              if (!prevState.doc.eq(view.state.doc)) {
+                this.clearSelectionLossTimer();
 
                 if (this.selectionTimer) {
                   clearTimeout(this.selectionTimer);
+                  this.selectionTimer = null;
                 }
 
-                this.selectionTimer = setTimeout(() => {
-                  this.selectionTimer = null;
-                  this.showForSelection(view);
-                }, SELECTION_DELAY_MS);
+                this.hideDot();
+                return;
               }
+
+              if (view.state.selection.eq(prevState.selection)) {
+                return;
+              }
+
+              // A press on the dot can briefly clear the selection before
+              // the click fires; ignore that window so the dot is not
+              // removed under the cursor.
+              if (Date.now() - this.dotPointerDownAt < DOT_PRESS_GUARD_MS) {
+                return;
+              }
+
+              const { selection } = view.state;
+              const dot = this.dot;
+
+              // The same range keeps its dot: re-deriving on every
+              // selection tick made the button flicker away while other
+              // plugins touched the state.
+              if (
+                dot &&
+                !selection.empty &&
+                dot.selectionFrom === selection.from &&
+                dot.selectionTo === selection.to
+              ) {
+                return;
+              }
+
+              // A collapsed selection may be transient (IME composition,
+              // sync, our own card flow); FluentRead waits out a short
+              // selection-loss window instead of dropping the indicator
+              // immediately. Hover dots own their lifecycle, so they are
+              // not affected.
+              if (selection.empty) {
+                if (
+                  dot?.selectionFrom !== undefined &&
+                  !this.selectionLossTimer
+                ) {
+                  this.selectionLossTimer = setTimeout(
+                    action(() => {
+                      this.selectionLossTimer = null;
+                      this.hideDot();
+                    }),
+                    SELECTION_LOSS_GRACE_MS
+                  );
+                }
+
+                return;
+              }
+
+              this.clearSelectionLossTimer();
+              this.hideDot();
+
+              if (this.selectionTimer) {
+                clearTimeout(this.selectionTimer);
+              }
+
+              this.selectionTimer = setTimeout(() => {
+                this.selectionTimer = null;
+                this.showForSelection(view);
+              }, SELECTION_DELAY_MS);
             },
             destroy: () => {
               document.removeEventListener("scroll", handleScroll, {
+                capture: true,
+              });
+              document.removeEventListener("pointerdown", handlePointerDown, {
+                capture: true,
+              });
+              document.removeEventListener("keydown", handleKeyDown, {
                 capture: true,
               });
               this.removeDot();
@@ -223,12 +359,73 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
               if (this.selectionTimer) {
                 clearTimeout(this.selectionTimer);
               }
+
+              this.clearSelectionLossTimer();
+
+              if (this.scrollRaf) {
+                window.cancelAnimationFrame(this.scrollRaf);
+                this.scrollRaf = 0;
+              }
             },
           };
         },
       }),
     ];
   }
+
+  /**
+   * Cancels a pending selection-loss hide.
+   */
+  private clearSelectionLossTimer() {
+    if (this.selectionLossTimer) {
+      clearTimeout(this.selectionLossTimer);
+      this.selectionLossTimer = null;
+    }
+  }
+
+  /**
+   * Repositions the visible dot onto its (possibly scrolled) anchor, hiding
+   * it once the anchor text leaves the visible pane.
+   */
+  private repositionAnchor = action(() => {
+    this.scrollRaf = 0;
+    const dot = this.dot;
+    const view = this.editor?.view;
+
+    if (!dot || !view || this.popoverOverlay || view.isDestroyed) {
+      return;
+    }
+
+    try {
+      if (dot.anchorPos > view.state.doc.content.size) {
+        this.hideDot();
+        return;
+      }
+
+      const anchor = view.coordsAtPos(dot.anchorPos);
+      const pane = editorPaneRect(view);
+
+      if (
+        pane &&
+        (anchor.bottom < pane.top - 40 || anchor.top > pane.bottom + 40)
+      ) {
+        this.hideDot();
+        return;
+      }
+
+      dot.anchor = anchor;
+      dot.left = anchor.right + 10;
+      dot.top = anchor.bottom + 6;
+      this.renderDot();
+
+      if (this.peekOverlay) {
+        this.removePeek();
+        this.showPeek();
+      }
+    } catch {
+      this.hideDot();
+    }
+  });
 
   /**
    * Shows the dot for the current selection after it settles.
@@ -329,6 +526,9 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
       left: anchor.right + 10,
       top: anchor.bottom + 6,
       anchor,
+      anchorPos: selection.to,
+      selectionFrom: selection.from,
+      selectionTo: selection.to,
       text,
       blockIndex: selection.$from.index(0),
       isWord,
@@ -392,6 +592,7 @@ export default class HoverTranslateExtension extends Extension<HoverTranslateOpt
           left: anchor.right + 10,
           top: anchor.bottom + 6,
           anchor,
+          anchorPos: result.pos,
           text: word,
           blockIndex: $pos.index(0),
           isWord: true,
@@ -659,6 +860,15 @@ const DotButton = styled.button<{ $left: number; $top: number }>`
   cursor: pointer;
   user-select: none;
   z-index: 1;
+
+  /* Invisible halo that widens the hit target without changing the visual
+     size, mirroring the FluentRead indicator's forgiving touch area. */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 99px;
+  }
 `;
 
 /**
