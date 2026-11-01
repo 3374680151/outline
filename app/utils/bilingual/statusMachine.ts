@@ -1,4 +1,7 @@
-import type { BilingualBlockState, BilingualBlockStatus } from "@shared/types/bilingual";
+import type {
+  BilingualBlockState,
+  BilingualBlockStatus,
+} from "@shared/types/bilingual";
 
 /**
  * Pure state machine for the translation status of a single block of a
@@ -64,7 +67,9 @@ export function reduceBlockState(
   humanEdited: boolean,
   event: BlockEvent
 ): BilingualBlockState & { humanEdited: boolean } {
-  const withHuman = (status: BilingualBlockStatus): BilingualBlockState & { humanEdited: boolean } => ({
+  const withHuman = (
+    status: BilingualBlockStatus
+  ): BilingualBlockState & { humanEdited: boolean } => ({
     ...state,
     status,
     humanEdited,

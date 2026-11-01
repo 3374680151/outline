@@ -35,10 +35,11 @@ import {
 } from "~/utils/bilingual/prefs";
 
 /**
- * The bilingual toolbar: translation progress, structure repair, the grammar
- * issue list, the save actions, and the per-user experience toggles. It
- * renders inside the primary pane's document header while the bilingual view
- * is active.
+ * The bilingual toolbar: translation progress, structure repair, the save
+ * actions, and the per-user experience toggles. Grammar issues are managed
+ * from the floating badge in the editor pane corner, not from here. The
+ * toolbar renders inside the primary pane's document header while the
+ * bilingual view is active.
  */
 export const BilingualToolbar = observer(function BilingualToolbar({
   document,
@@ -52,16 +53,9 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 
   const progress = engine?.progress ?? { translated: 0, total: 0 };
   const hasMismatch = engine?.hasMismatch ?? false;
-  const issueCount = grammarExtension?.issueCount ?? 0;
-  const checking = grammarExtension?.checking ?? false;
   const failedCount = engine?.failedCount ?? 0;
   const outdatedManual = engine?.outdatedManualCount ?? 0;
   const grammarUnavailable = grammarExtension?.unavailable ?? false;
-
-
-  // Recomputed on each render: the observable issueCount/checking above
-  // trigger re-renders whenever the underlying matches change.
-  const issues = grammarExtension?.listIssues() ?? [];
 
   const handleSaveMerged = React.useCallback(async () => {
     if (!pair || saving) {
@@ -72,8 +66,11 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 
     try {
       const source = documents.get(pair.sourceDocumentId);
-      const baseTitle =
-        (document.title || source?.title || t("Untitled")).trim();
+      const baseTitle = (
+        document.title ||
+        source?.title ||
+        t("Untitled")
+      ).trim();
       // The merged document is titled after the source. A suffix marks it as a
       // derived copy, but it is only added when the title does not already say
       // so – otherwise repeated saves keep stacking the suffix.
@@ -164,6 +161,17 @@ export const BilingualToolbar = observer(function BilingualToolbar({
       ),
     });
   }, [dialogs, document, t, policies]);
+
+  const handleTranslateSelection = React.useCallback(() => {
+    // Extensions answer synchronously; without a translatable selection
+    // anywhere the request lands nowhere, so say so instead of failing
+    // silently.
+    const handled = BilingualStore.requestTranslateSelection();
+
+    if (!handled) {
+      toast.info(t("Select text to translate first"));
+    }
+  }, [t]);
 
   const saveActions = React.useMemo(
     () => [
@@ -289,6 +297,13 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           {progress.translated}/{progress.total}
         </Chip>
       )}
+      <ClickableChip
+        onClick={handleTranslateSelection}
+        title={t("Translate selection")}
+      >
+        <GlobeIcon size={13} />
+        {t("Translate")}
+      </ClickableChip>
       {hasMismatch && (
         <WarningChip>
           <WarningIcon size={14} />
@@ -327,41 +342,15 @@ export const BilingualToolbar = observer(function BilingualToolbar({
         <WarningChip>
           <WarningIcon size={14} />
           <span>
-            {t("{{count}} translations are outdated", { count: outdatedManual })}
+            {t("{{count}} translations are outdated", {
+              count: outdatedManual,
+            })}
           </span>
           <RepairButton onClick={() => engine?.retranslateOutdatedManual()}>
             {t("Update")}
           </RepairButton>
         </WarningChip>
       )}
-      {checking ? (
-        <Chip title={t("Checking grammar…")}>{t("Checking…")}</Chip>
-      ) : issueCount > 0 ? (
-        <DropdownMenu
-          action={createActionWithChildren({
-            name: t("Grammar issues"),
-            section: ActiveDocumentSection,
-            children: issues.map((issue) =>
-              createAction({
-                name: (
-                  <IssueItem>
-                    <IssueTitle>
-                      {issue.match.shortMessage ?? issue.match.rule.category.name}
-                    </IssueTitle>
-                    <IssueMessage>{issue.match.message}</IssueMessage>
-                  </IssueItem>
-                ),
-                section: ActiveDocumentSection,
-                perform: () => grammarExtension?.revealIssue(issue),
-              })
-            ),
-          })}
-          ariaLabel={t("Grammar issues")}
-          align="start"
-        >
-          <IssueChip>{issueCount}</IssueChip>
-        </DropdownMenu>
-      ) : null}
       <DropdownMenu
         action={createActionWithChildren({
           name: t("Save"),
@@ -393,6 +382,7 @@ export const BilingualToolbar = observer(function BilingualToolbar({
 const Bar = styled.div`
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 `;
 
@@ -416,6 +406,27 @@ const WarningChip = styled(Chip)`
   gap: 6px;
 `;
 
+// A real button element: the translate entry must be reachable by keyboard
+// and announced to assistive technology, which a clickable span is not.
+const ClickableChip = styled(Chip).attrs({
+  as: "button",
+  type: "button",
+})`
+  cursor: pointer;
+  color: ${s("accent")};
+  border: none;
+  font-family: inherit;
+
+  &:hover {
+    background: ${(props) => props.theme.accent}1f;
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${(props) => props.theme.accent};
+    outline-offset: 1px;
+  }
+`;
+
 const RepairButton = styled.button`
   background: none;
   border: 1px solid ${s("noticeWarningText")};
@@ -424,30 +435,4 @@ const RepairButton = styled.button`
   font-size: 11px;
   cursor: pointer;
   padding: 1px 8px;
-`;
-
-const IssueChip = styled(Chip)`
-  color: #fff;
-  background: ${s("accent")};
-  cursor: pointer;
-`;
-
-const IssueItem = styled.span`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 340px;
-`;
-
-const IssueTitle = styled.span`
-  font-weight: 600;
-`;
-
-const IssueMessage = styled.span`
-  color: ${s("textSecondary")};
-  font-weight: 400;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `;

@@ -132,7 +132,11 @@ export function pmRangeForOffset(
   let crossesGap = false;
 
   for (const entry of map.entries) {
-    if (entry.kind === "gap" && entry.strStart > offset && entry.strStart < end) {
+    if (
+      entry.kind === "gap" &&
+      entry.strStart > offset &&
+      entry.strStart < end
+    ) {
       crossesGap = true;
       break;
     }

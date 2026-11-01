@@ -50,9 +50,7 @@ export default async function bilingualCreator(
     });
 
     if (existing) {
-      throw InvalidRequestError(
-        "Document is already part of a bilingual pair"
-      );
+      throw InvalidRequestError("Document is already part of a bilingual pair");
     }
   } else {
     source = await documentCreator(ctx, {

@@ -39,12 +39,17 @@ function candidates(
     .filter(Boolean);
 
   const ids = team?.defaultProviderId
-    ? [team.defaultProviderId, ...order.filter((id) => id !== team.defaultProviderId)]
+    ? [
+        team.defaultProviderId,
+        ...order.filter((id) => id !== team.defaultProviderId),
+      ]
     : order;
 
   const configured = ids
     .map((id) => PROVIDERS[id])
-    .filter((provider) => provider?.isConfigured(team?.configs.get(provider.id)));
+    .filter((provider) =>
+      provider?.isConfigured(team?.configs.get(provider.id))
+    );
 
   const now = Date.now();
   const ready = configured.filter(

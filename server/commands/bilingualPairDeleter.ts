@@ -25,7 +25,10 @@ export default async function bilingualPairDeleter(
       ? pair.targetDocumentId
       : pair.sourceDocumentId;
 
-  const twin = await Document.findByPk(twinId, { userId: user.id, transaction });
+  const twin = await Document.findByPk(twinId, {
+    userId: user.id,
+    transaction,
+  });
 
   if (twin) {
     authorize(user, "delete", twin);

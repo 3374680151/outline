@@ -99,6 +99,8 @@ export interface GrammarMatchDTO {
 
 /** AI dictionary entry for a word lookup (FluentRead-compatible protocol). */
 export interface WordLookupDTO {
+  /** Where the entry came from, surfaced as a trust label in the UI. */
+  source?: "ecdict" | "ai";
   /** The looked-up word. */
   word: string;
   /** International phonetic alphabet, empty when unavailable. */

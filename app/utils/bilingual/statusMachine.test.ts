@@ -31,7 +31,9 @@ describe("reduceBlockState", () => {
       sourceHash: "h1",
       autoText: "你好",
     });
-    const manual = reduceBlockState(auto, false, { type: "targetManuallyEdited" });
+    const manual = reduceBlockState(auto, false, {
+      type: "targetManuallyEdited",
+    });
     expect(manual.status).toBe("manual");
 
     const afterSourceChange = reduceBlockState(manual, true, {
@@ -52,7 +54,9 @@ describe("reduceBlockState", () => {
   });
 
   it("re-enters the translation flow after a confirmed retranslate", () => {
-    const stale = reduceBlockState(initial, false, { type: "targetManuallyEdited" });
+    const stale = reduceBlockState(initial, false, {
+      type: "targetManuallyEdited",
+    });
     const pending = reduceBlockState(stale, true, {
       type: "retranslateConfirmed",
       sourceHash: "h9",

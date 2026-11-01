@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEnglishWord, sentenceAtOffset, wordAtOffset } from "./wordNormalize";
+import {
+  normalizeEnglishWord,
+  sentenceAtOffset,
+  wordAtOffset,
+} from "./wordNormalize";
 
 describe("normalizeEnglishWord", () => {
   it("accepts plain words", () => {

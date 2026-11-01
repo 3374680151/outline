@@ -130,7 +130,8 @@ export function selectionIntersectsBlock(
 ): boolean {
   const range = blockRange(view, index);
   return range
-    ? view.state.selection.from < range.to && view.state.selection.to > range.from
+    ? view.state.selection.from < range.to &&
+        view.state.selection.to > range.from
     : false;
 }
 

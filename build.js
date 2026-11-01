@@ -70,6 +70,7 @@ async function build() {
     ),
     execAsync("cp package.json ./build"),
     execAsync("cp -R ./shared/i18n/locales ./build/shared/i18n"),
+    execAsync("cp -R ./server/data ./build/server/data"),
     ...d.map(async (plugin) =>
       execAsync(
         `mkdir -p ./build/plugins/${plugin} && cp ./plugins/${plugin}/plugin.json ./build/plugins/${plugin}/plugin.json 2>/dev/null || :`

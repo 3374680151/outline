@@ -1,10 +1,7 @@
 import Logger from "@server/logging/Logger";
 import { TeamAiConfig } from "@server/models";
 import { decryptSecret } from "@server/utils/crypto";
-import type {
-  TeamProviderConfig,
-  TeamTranslationConfig,
-} from "./types";
+import type { TeamProviderConfig, TeamTranslationConfig } from "./types";
 
 /**
  * Loads and decrypts the AI service configuration of a workspace. A config

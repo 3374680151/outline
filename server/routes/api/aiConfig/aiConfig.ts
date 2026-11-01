@@ -63,12 +63,16 @@ async function resolveTestCredentials(
     baseUrl:
       overrides.baseUrl ||
       stored?.baseUrl ||
-      (providerId === "openai-compatible" ? env.OPENAI_BASE_URL ?? undefined : undefined),
+      (providerId === "openai-compatible"
+        ? (env.OPENAI_BASE_URL ?? undefined)
+        : undefined),
     apiKey:
       overrides.apiKey ||
       stored?.apiKey ||
-      (providerId === "deepl" ? env.DEEPL_API_KEY ?? undefined : undefined) ||
-      (providerId === "openai-compatible" ? env.OPENAI_API_KEY ?? undefined : undefined),
+      (providerId === "deepl" ? (env.DEEPL_API_KEY ?? undefined) : undefined) ||
+      (providerId === "openai-compatible"
+        ? (env.OPENAI_API_KEY ?? undefined)
+        : undefined),
     model: overrides.model || stored?.model || env.OPENAI_TRANSLATION_MODEL,
   };
 }
@@ -96,8 +100,7 @@ router.post(
         keyHint: keyHint(row?.apiKeyEncrypted ?? null),
         isDefault: row?.isDefault ?? false,
         fromEnvironment: {
-          "openai-compatible":
-            !!env.OPENAI_BASE_URL && !!env.OPENAI_API_KEY,
+          "openai-compatible": !!env.OPENAI_BASE_URL && !!env.OPENAI_API_KEY,
           deepl: !!env.DEEPL_API_KEY,
           languagetool: !!env.LANGUAGETOOL_URL,
         }[providerId],
@@ -347,14 +350,11 @@ router.post(
       }
     }
 
-    const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/models`,
-      {
-        method: "GET",
-        timeout: 15000,
-        ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
-      }
-    );
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, {
+      method: "GET",
+      timeout: 15000,
+      ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}),
+    });
 
     if (!response.ok) {
       ctx.body = { data: { models: [], error: `HTTP ${response.status}` } };

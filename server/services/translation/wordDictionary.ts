@@ -36,9 +36,8 @@ export interface WordLookupResult {
   translation: string;
 }
 
-const MAX_TERM_LENGTH = 64;
 const MAX_SENSES = 6;
-const ECDICT_FILE = path.resolve(__dirname, "../data/ecdict-core.json");
+const ECDICT_FILE = path.resolve(__dirname, "../../data/ecdict-core.json");
 
 /** Part-of-speech prefix (e.g. "n. " / "adj. "); unmatched rows are treated as pos-less. */
 const POS_PREFIX = /^\s*([a-zA-Z]{1,8}\.)\s*(.+)$/u;
@@ -46,21 +45,33 @@ const POS_PREFIX = /^\s*([a-zA-Z]{1,8}\.)\s*(.+)$/u;
 let indexPromise: Promise<Map<string, EcdictRow>> | null = null;
 
 /**
- * Lazily loads and indexes the bundled ECDICT core vocabulary.
+ * Lazily loads and indexes the bundled ECDICT core vocabulary. The index is
+ * memoized; a failure (e.g. the data file missing from a fresh build) resets
+ * the memo so the next lookup retries once the file is in place.
  *
  * @returns A map of lowercase word to its dictionary row.
  */
 async function loadEcdictIndex(): Promise<Map<string, EcdictRow>> {
-  const raw = await readFile(ECDICT_FILE, "utf8");
-  const rows = JSON.parse(raw) as EcdictRow[];
-  const index = new Map<string, EcdictRow>();
+  if (!indexPromise) {
+    indexPromise = readFile(ECDICT_FILE, "utf8")
+      .then((raw) => {
+        const rows = JSON.parse(raw) as EcdictRow[];
+        const index = new Map<string, EcdictRow>();
 
-  for (const row of rows) {
-    index.set(row[0].toLowerCase(), row);
+        for (const row of rows) {
+          index.set(row[0].toLowerCase(), row);
+        }
+
+        Logger.info("utils", `ECDICT index loaded (${index.size} words)`);
+        return index;
+      })
+      .catch((err) => {
+        indexPromise = null;
+        throw err;
+      });
   }
 
-  Logger.info("utils", `ECDICT index loaded (${index.size} words)`);
-  return index;
+  return indexPromise;
 }
 
 /**
@@ -69,8 +80,13 @@ async function loadEcdictIndex(): Promise<Map<string, EcdictRow>> {
  * @param value The raw definition block.
  * @returns Parsed parts-of-speech and texts.
  */
-function parseDefinitionLines(value: string): Array<{ pos?: string; text: string }> {
-  const lines = value.split("\n").filter((line) => line.trim());
+function parseDefinitionLines(
+  value: string
+): Array<{ pos?: string; text: string }> {
+  // ECDICT rows embed literal "\n" sequences inside their definition blocks
+  // rather than real newlines; normalize them before splitting.
+  const normalized = value.replace(/\\n/g, "\n");
+  const lines = normalized.split("\n").filter((line) => line.trim());
   const parsed = lines.map((line) => {
     const match = line.match(POS_PREFIX);
     return match ? { pos: match[1], text: match[2] } : { text: line };
@@ -166,7 +182,13 @@ export async function lookupWord(
   const term = rawTerm.trim().toLowerCase().slice(0, 64);
 
   if (!term) {
-    return { term: rawTerm, found: false, source: "mt-fallback", senses: [], translation: rawTerm };
+    return {
+      term: rawTerm,
+      found: false,
+      source: "mt-fallback",
+      senses: [],
+      translation: rawTerm,
+    };
   }
 
   const index = await loadEcdictIndex();
@@ -178,7 +200,7 @@ export async function lookupWord(
       continue;
     }
 
-    const senses = buildSenses(row[3], row[2]);
+    const senses = buildSenses(row[2], row[3]);
     const firstZh = senses.find((sense) => sense.zh)?.zh ?? "";
 
     return {
@@ -194,7 +216,12 @@ export async function lookupWord(
   }
 
   // Dictionary miss: free/AI translation fallback, honestly labeled.
-  const results = await translateWithFallback([rawTerm], from, to, new AbortController().signal);
+  const results = await translateWithFallback(
+    [rawTerm],
+    from,
+    to,
+    new AbortController().signal
+  );
   return {
     term: rawTerm,
     found: false,

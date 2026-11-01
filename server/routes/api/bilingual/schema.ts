@@ -84,7 +84,9 @@ export const BilingualUpdateStateSchema = BaseSchema.extend({
     ),
 });
 
-export type BilingualUpdateStateReq = z.infer<typeof BilingualUpdateStateSchema>;
+export type BilingualUpdateStateReq = z.infer<
+  typeof BilingualUpdateStateSchema
+>;
 
 export const BilingualRealignSchema = BaseSchema.extend({
   body: z.object({

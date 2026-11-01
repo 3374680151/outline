@@ -1,12 +1,30 @@
 import type { GrammarMatchDTO } from "@shared/types/bilingual";
 
 /** Display categories for grammar issues, mirroring the grammar web workbench. */
-export const GRAMMAR_TYPES = ["typo", "grammar", "punct", "style", "other"] as const;
+export const GRAMMAR_TYPES = [
+  "typo",
+  "grammar",
+  "punct",
+  "style",
+  "other",
+] as const;
 
 export type GrammarType = (typeof GRAMMAR_TYPES)[number];
 
 /** Human label per type. */
 export const GRAMMAR_TYPE_LABEL: Record<GrammarType, string> = {
+  typo: "Spelling",
+  grammar: "Grammar",
+  punct: "Punctuation",
+  style: "Style",
+  other: "Other",
+};
+
+/**
+ * i18n key per display category. The keys are the English labels; locale
+ * files carry the translated wording (e.g. 拼写/语法/标点/风格).
+ */
+export const GRAMMAR_TYPE_LABEL_KEY: Record<GrammarType, string> = {
   typo: "Spelling",
   grammar: "Grammar",
   punct: "Punctuation",
@@ -36,11 +54,18 @@ export function matchType(match: GrammarMatchDTO): GrammarType {
   const rid = match.rule.id.toUpperCase();
   const key = `${cat} ${rid}`;
 
-  if (/MORFOLOGIK|HUNSPELL|SPELL|CONFUSION|^TYPO|_TYPO|TYPO_/.test(key) && !/TYPOGRAPHY/.test(cat)) {
+  if (
+    /MORFOLOGIK|HUNSPELL|SPELL|CONFUSION|^TYPO|_TYPO|TYPO_/.test(key) &&
+    !/TYPOGRAPHY/.test(cat)
+  ) {
     return "typo";
   }
 
-  if (/STYLE|REDUNDANCY|WORDINESS|PLAIN_ENGLISH|COLLOCATION|PLEONASM|INFORMAL|SIMPLIFY|PASSIVE/.test(key)) {
+  if (
+    /STYLE|REDUNDANCY|WORDINESS|PLAIN_ENGLISH|COLLOCATION|PLEONASM|INFORMAL|SIMPLIFY|PASSIVE/.test(
+      key
+    )
+  ) {
     return "style";
   }
 

@@ -78,7 +78,11 @@ describe("applyBlockOps", () => {
 
   it("does not mutate the input array", () => {
     const input = ["a", "b"];
-    applyBlockOps(input, [{ op: "remove", index: 0, signature: p() }], () => "x");
+    applyBlockOps(
+      input,
+      [{ op: "remove", index: 0, signature: p() }],
+      () => "x"
+    );
     expect(input).toEqual(["a", "b"]);
   });
 });

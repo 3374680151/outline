@@ -57,6 +57,57 @@ export function mountReactOverlay(zIndex: number): ReactOverlay {
 export const VIEWPORT_INSET = 12;
 
 /**
+ * Finds the nearest ancestor element with a scrollable overflow, used to
+ * pin floating UI to the visible corner of an editor pane.
+ *
+ * @param element The element to start from.
+ * @returns The scroll container, or null when the element scrolls in the
+ * window.
+ */
+export function scrollParentOf(element: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = element.parentElement;
+
+  while (node && node !== document.body) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return node;
+    }
+
+    node = node.parentElement;
+  }
+
+  return null;
+}
+
+/**
+ * The visible rectangle of the pane an editor scrolls in, in viewport
+ * coordinates.
+ *
+ * @param view The ProseMirror editor view.
+ * @returns The pane rect, or null when the view is gone.
+ */
+export function editorPaneRect(view: EditorViewLike): {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+} | null {
+  if (!view || view.isDestroyed) {
+    return null;
+  }
+
+  const scroller = scrollParentOf(view.dom);
+  return (scroller ?? view.dom).getBoundingClientRect();
+}
+
+/** Minimal structural type of a ProseMirror view used for positioning. */
+interface EditorViewLike {
+  dom: HTMLElement;
+  isDestroyed: boolean;
+}
+
+/**
  * Clamps a floating panel position into the visual viewport.
  *
  * The panel is placed below the anchor when it fits, which keeps it clear of
@@ -76,8 +127,7 @@ export function clampPanelPosition(
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
-  const spaceBelow =
-    viewportHeight - VIEWPORT_INSET - anchor.bottom - gap;
+  const spaceBelow = viewportHeight - VIEWPORT_INSET - anchor.bottom - gap;
   const spaceAbove = anchor.top - gap - VIEWPORT_INSET;
   const above = spaceBelow < size.height && spaceAbove > spaceBelow;
 

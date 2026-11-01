@@ -14,6 +14,7 @@ import { restoreRevision } from "~/actions/definitions/revisions";
 import { Action } from "~/components/Actions";
 import { BilingualToolbar } from "~/components/BilingualToolbar";
 import { useBilingualPair } from "~/components/BilingualPairProvider";
+import { EditingAssistToggles } from "~/components/EditingAssistToggles";
 import { useSplitView } from "~/components/SplitView/context";
 import Badge from "~/components/Badge";
 import Button from "~/components/Button";
@@ -209,6 +210,9 @@ function DocumentHeader({
                 <BilingualToolbar document={document} />
               </Action>
             )}
+          {!isMobile && !isDeleted && !isRevision && (
+            <EditingAssistToggles />
+          )}
           {!isDeleted && !isRevision && can.listViews && (
             <Collaborators
               document={document}

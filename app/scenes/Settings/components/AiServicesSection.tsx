@@ -211,12 +211,15 @@ const ProviderCard = observer(function ProviderCard({
       setTest(
         result.ok
           ? { status: "ok", latencyMs: result.latencyMs }
-          : { status: "failed", error: result.error ?? "failed" }
+          : {
+              status: "failed",
+              error: result.error ?? t("Connection test failed"),
+            }
       );
     } catch (_err) {
-      setTest({ status: "failed", error: "request failed" });
+      setTest({ status: "failed", error: t("Connection test failed") });
     }
-  }, [provider.providerId, baseUrl, model, apiKey]);
+  }, [provider.providerId, baseUrl, model, apiKey, t]);
 
   const handleFetchModels = React.useCallback(async () => {
     try {
@@ -227,12 +230,16 @@ const ProviderCard = observer(function ProviderCard({
       const data = res.data as { models: string[]; error?: string };
 
       if (data.error) {
-        toast.error(t("Could not fetch models: {{error}}", { error: data.error }));
+        toast.error(
+          t("Could not fetch models: {{error}}", { error: data.error })
+        );
         return;
       }
 
       setModels(data.models);
-      toast.success(t("{{count}} models available", { count: data.models.length }));
+      toast.success(
+        t("{{count}} models available", { count: data.models.length })
+      );
     } catch (_err) {
       toast.error(t("Could not fetch models"));
     }
@@ -318,7 +325,11 @@ const ProviderCard = observer(function ProviderCard({
         <Button disabled={saving || !dirty} onClick={handleSave}>
           {t("Save")}
         </Button>
-        <Button neutral onClick={handleTest} disabled={test.status === "running"}>
+        <Button
+          neutral
+          onClick={handleTest}
+          disabled={test.status === "running"}
+        >
           {test.status === "running" ? t("Testing…") : t("Test connection")}
         </Button>
         {!provider.isDefault && !isLanguageTool && (
@@ -328,9 +339,7 @@ const ProviderCard = observer(function ProviderCard({
         )}
         <TestResult>
           {test.status === "ok" && (
-            <span>
-              {t("Connected in {{ms}}ms", { ms: test.latencyMs })}
-            </span>
+            <span>{t("Connected in {{ms}}ms", { ms: test.latencyMs })}</span>
           )}
           {test.status === "failed" && <Failed>{test.error}</Failed>}
         </TestResult>

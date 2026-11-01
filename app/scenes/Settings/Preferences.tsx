@@ -308,11 +308,13 @@ function Preferences() {
       >
         <InputSelect
           value={user.getPreference(UserPreference.BilingualTranslationTrigger)}
-          options={[
-            { type: "item", label: t("Off"), value: "off" },
-            { type: "item", label: t("Dot next to selection"), value: "dot" },
-            { type: "item", label: t("Hover words"), value: "hover" },
-          ] satisfies Option[]}
+          options={
+            [
+              { type: "item", label: t("Off"), value: "off" },
+              { type: "item", label: t("Dot next to selection"), value: "dot" },
+              { type: "item", label: t("Hover words"), value: "hover" },
+            ] satisfies Option[]
+          }
           onChange={handleBilingualTriggerChange}
           label={t("Translation trigger")}
           labelHidden

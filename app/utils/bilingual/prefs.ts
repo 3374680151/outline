@@ -123,12 +123,12 @@ export function migrateLegacyPreferences(): void {
 /**
  * Reads the translation trigger mode.
  *
- * @returns The configured trigger mode, "dot" by default.
+ * @returns The configured trigger mode, "off" by default.
  */
 export function translationTrigger(): TranslationTriggerMode {
   const user = currentUser();
   return (user?.getPreference(UserPreference.BilingualTranslationTrigger) ??
-    "dot") as TranslationTriggerMode;
+    "off") as TranslationTriggerMode;
 }
 
 /**
@@ -146,12 +146,13 @@ export function setTranslationTrigger(mode: TranslationTriggerMode): void {
 /**
  * Whether grammar checking is enabled for this user.
  *
- * @returns True unless the user disabled it.
+ * @returns True when the user explicitly turned it on, false by default.
  */
 export function grammarCheckingEnabled(): boolean {
-  return currentUser()?.getPreference(
-    UserPreference.BilingualGrammarChecking
-  ) ?? true;
+  return (
+    currentUser()?.getPreference(UserPreference.BilingualGrammarChecking) ??
+    false
+  );
 }
 
 /**
@@ -195,9 +196,8 @@ export function setGrammarLevel(level: "default" | "picky"): void {
  */
 export function grammarIgnoredRules(): string[] {
   return (
-    currentUser()?.getPreference(
-      UserPreference.BilingualGrammarIgnoredRules
-    ) ?? []
+    currentUser()?.getPreference(UserPreference.BilingualGrammarIgnoredRules) ??
+    []
   );
 }
 
@@ -222,7 +222,9 @@ export function addGrammarIgnoredRule(ruleId: string): string[] {
  * @returns True by default; false restricts translation to visible blocks on demand.
  */
 export function autoTranslateOnOpen(): boolean {
-  return currentUser()?.getPreference(UserPreference.BilingualAutoTranslate) ?? true;
+  return (
+    currentUser()?.getPreference(UserPreference.BilingualAutoTranslate) ?? true
+  );
 }
 
 /**
@@ -241,7 +243,10 @@ const TRANSLATION_TARGET_LANG_KEY = "bilingual-translation-target-lang";
 const TRANSLATION_PROVIDER_KEY = "bilingual-translation-provider";
 
 /** Common target languages offered in the translate card. */
-export const TRANSLATION_TARGET_LANGS: ReadonlyArray<{ code: string; label: string }> = [
+export const TRANSLATION_TARGET_LANGS: ReadonlyArray<{
+  code: string;
+  label: string;
+}> = [
   { code: "zh", label: "中文" },
   { code: "en", label: "English" },
   { code: "ja", label: "日本語" },

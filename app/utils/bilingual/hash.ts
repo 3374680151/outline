@@ -17,7 +17,10 @@ const FNV_32_PRIME = 0x01000193;
 export function textHash(input: string): string {
   const h1 = fnv1a(input, 0x811c9dc5);
   const h2 = fnv1a(input + "\u0000salt", 0x811c9dc5);
-  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+  return (
+    (h1 >>> 0).toString(16).padStart(8, "0") +
+    (h2 >>> 0).toString(16).padStart(8, "0")
+  );
 }
 
 /**

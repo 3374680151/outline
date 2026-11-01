@@ -70,27 +70,17 @@ module.exports = {
         { transaction }
       );
 
-      await queryInterface.addIndex(
-        "bilingual_pairs",
-        ["teamId"],
-        { transaction }
-      );
-      await queryInterface.addIndex(
-        "bilingual_pairs",
-        ["sourceDocumentId"],
-        {
-          unique: true,
-          transaction,
-        }
-      );
-      await queryInterface.addIndex(
-        "bilingual_pairs",
-        ["targetDocumentId"],
-        {
-          unique: true,
-          transaction,
-        }
-      );
+      await queryInterface.addIndex("bilingual_pairs", ["teamId"], {
+        transaction,
+      });
+      await queryInterface.addIndex("bilingual_pairs", ["sourceDocumentId"], {
+        unique: true,
+        transaction,
+      });
+      await queryInterface.addIndex("bilingual_pairs", ["targetDocumentId"], {
+        unique: true,
+        transaction,
+      });
     });
   },
 

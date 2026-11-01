@@ -1,6 +1,10 @@
 import Logger from "@server/logging/Logger";
 import fetch from "@server/utils/fetch";
-import type { TranslationProvider, TranslationRequest, TranslationResult } from "../types";
+import type {
+  TranslationProvider,
+  TranslationRequest,
+  TranslationResult,
+} from "../types";
 
 /**
  * Free fallback provider using the Microsoft Edge web translator endpoint,
@@ -10,7 +14,8 @@ import type { TranslationProvider, TranslationRequest, TranslationResult } from 
  * fallback chain rather than breaking the endpoint.
  */
 
-const MICROSOFT_TRANSLATE_URL = "https://edge.microsoft.com/translate/translatetext";
+const MICROSOFT_TRANSLATE_URL =
+  "https://edge.microsoft.com/translate/translatetext";
 
 type MicrosoftTranslation = { translations?: { text?: string }[] };
 
@@ -56,7 +61,10 @@ const microsoftFree: TranslationProvider = {
 
   async translate(req: TranslationRequest): Promise<TranslationResult> {
     const url = new URL(MICROSOFT_TRANSLATE_URL);
-    url.searchParams.set("from", req.from && req.from !== "auto" ? req.from : "");
+    url.searchParams.set(
+      "from",
+      req.from && req.from !== "auto" ? req.from : ""
+    );
     url.searchParams.set("to", req.to);
     url.searchParams.set("isEnterpriseClient", "false");
 

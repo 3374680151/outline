@@ -22,9 +22,7 @@ type Props = {
  * route renders the source document only – without this notice the
  * translation would look lost.
  */
-export default observer(function BilingualMobileBanner({
-  document,
-}: Props) {
+export default observer(function BilingualMobileBanner({ document }: Props) {
   const { t } = useTranslation();
   const isMobile = useMobile();
   const { documents } = useStores();
@@ -48,7 +46,9 @@ export default observer(function BilingualMobileBanner({
 
   return (
     <Banner role="note">
-      <Text>{t("The side by side bilingual view is available on desktop.")}</Text>
+      <Text>
+        {t("The side by side bilingual view is available on desktop.")}
+      </Text>
       <OpenButton
         type="button"
         onClick={() => {

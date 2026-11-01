@@ -380,16 +380,40 @@ class BilingualStore {
   };
 
   /**
-   * Registers an editor view for a document so cross-pane actions (such as
-   * writing a translation into the mirror document) can reach it.
-   *
-   * @param documentId The document the view renders.
-   * @param view The ProseMirror view.
+   * Incremented whenever the toolbar asks for the current selection to be
+   * translated; the hover-translate extensions react to this counter.
    */
+  @observable
+  translateSelectionRequest = 0;
+
+  /** Whether an extension opened a card for the current request. */
+  private translateSelectionHandled = false;
+
+  /**
+   * Requests that the hover-translate extension opens its card for the
+   * editor selection. Extensions answer synchronously through
+   * markTranslateSelectionHandled before the counter change is delivered,
+   * so the return value tells the caller whether anything was translated.
+   *
+   * @returns True when an extension opened a card for this request.
+   */
+  requestTranslateSelection = action(() => {
+    this.translateSelectionHandled = false;
+    this.translateSelectionRequest += 1;
+    return this.translateSelectionHandled;
+  });
+
+  /**
+   * Marks the current translate-selection request as handled, meaning the
+   * translation card was opened for it.
+   */
+  markTranslateSelectionHandled = action(() => {
+    this.translateSelectionHandled = true;
+  });
+
   registerEditor = action((documentId: string, view: EditorView) => {
     this.views.set(documentId, view);
   });
-
 
   /**
    * Removes a registered editor view.
@@ -409,7 +433,6 @@ class BilingualStore {
   getView = (documentId: string): EditorView | undefined =>
     this.views.get(documentId);
 
-
   /**
    * Looks a word up in the AI dictionary (requires an AI translation
    * provider to be configured server-side).
@@ -427,8 +450,19 @@ class BilingualStore {
         word,
         ...(context ? { context } : {}),
       });
-      const data = res.data as { available?: boolean; entry?: WordLookupDTO };
-      return data?.available ? data.entry ?? null : null;
+      const data = res.data as {
+        available?: boolean;
+        source?: "ecdict" | "ai";
+        entry?: WordLookupDTO;
+      };
+
+      if (!data?.available || !data.entry) {
+        return null;
+      }
+
+      // Surface the lookup tier alongside the entry so the card can label
+      // its trust level (local dictionary vs AI generated).
+      return { ...data.entry, source: data.source };
     } catch (err) {
       Logger.warn("translations.word lookup failed", { err });
       return null;

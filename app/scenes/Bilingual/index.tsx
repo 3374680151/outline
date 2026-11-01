@@ -176,7 +176,9 @@ const BilingualScene: React.FC = observer(function BilingualScene() {
                     )}
                   </RowTitle>
                   <RowMeta>
-                    <LangBadge>EN → CN</LangBadge>
+                    <LangBadge>
+                      {`${row.sourceLanguage.slice(0, 2).toUpperCase()} → ${row.targetLanguage.slice(0, 2).toUpperCase()}`}
+                    </LangBadge>
                     {collection && (
                       <>
                         <Dot>·</Dot>
@@ -199,7 +201,6 @@ const BilingualScene: React.FC = observer(function BilingualScene() {
           })}
         </List>
       )}
-
     </Container>
   );
 });

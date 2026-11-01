@@ -25,10 +25,9 @@ export const AiConfigUpdateSchema = BaseSchema.extend({
     baseUrl: z
       .string()
       .max(2048)
-      .refine(
-        (value) => value === "" || /^https?:\/\//.test(value),
-        { error: "Base URL must be an http(s) URL" }
-      )
+      .refine((value) => value === "" || /^https?:\/\//.test(value), {
+        error: "Base URL must be an http(s) URL",
+      })
       .optional(),
 
     /** Plaintext API key to store; it is encrypted at rest. */

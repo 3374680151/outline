@@ -1,10 +1,25 @@
-import { Plugin } from "prosemirror-state";
+import { Plugin, PluginKey } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 import { ySyncPluginKey } from "y-prosemirror";
 import Extension from "@shared/editor/lib/Extension";
 import BilingualStore from "~/stores/BilingualStore";
 import { MIRROR_WRITE_META } from "~/utils/bilingual/editorBlocks";
+import { registerMirrorFlashListener } from "~/utils/bilingual/mirrorFlash";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
 import { observeBlockVisibility } from "~/utils/bilingual/visibility";
+
+/** How long the freshly written mirror block stays highlighted. */
+const MIRROR_FLASH_MS = 1500;
+
+/** Plugin state carrying the block currently being highlighted. */
+interface MirrorFlashState {
+  index: number;
+  until: number;
+}
+
+const flashKey = new PluginKey<MirrorFlashState | null>(
+  "bilingual-mirror-flash"
+);
 
 /** Live bilingual state of the host editor, resolved at event time. */
 export interface BilingualMirrorState {
@@ -45,7 +60,49 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
     const getState = this.options.getState;
 
     return [
-      new Plugin({
+      new Plugin<MirrorFlashState | null>({
+        key: flashKey,
+        state: {
+          init: () => null,
+          apply: (tr, value) => {
+            const meta = tr.getMeta(flashKey) as MirrorFlashState | null;
+
+            if (meta !== undefined) {
+              return meta;
+            }
+
+            return value;
+          },
+        },
+        props: {
+          decorations: (state) => {
+            const flash = flashKey.getState(state);
+
+            if (!flash || Date.now() > flash.until) {
+              return DecorationSet.empty;
+            }
+
+            if (flash.index >= state.doc.childCount) {
+              return DecorationSet.empty;
+            }
+
+            // Top-level block boundaries straight from the document: the
+            // flash index is parallel on both panes.
+            let from = 0;
+
+            for (let i = 0; i < flash.index; i++) {
+              from += state.doc.child(i).nodeSize;
+            }
+
+            const to = from + state.doc.child(flash.index).nodeSize;
+
+            return DecorationSet.create(state.doc, [
+              Decoration.node(from, to, {
+                class: "bilingual-mirror-flash",
+              }),
+            ]);
+          },
+        },
         appendTransaction: (trs, _oldState, newState) => {
           const { side, engine } = getState();
 
@@ -95,6 +152,7 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
           }
 
           const { side, engine } = getState();
+          let unregisterFlash: (() => void) | null = null;
 
           if (side && engine) {
             if (side === "source") {
@@ -119,10 +177,35 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
             }
 
             engine.registerTarget(editorView);
+
+            // The target pane renders the write-flash decoration; the mirror
+            // engine announces writes through the module registry.
+            unregisterFlash = registerMirrorFlashListener((index) => {
+              const until = Date.now() + MIRROR_FLASH_MS;
+
+              editorView.dispatch(
+                editorView.state.tr.setMeta(flashKey, { index, until })
+              );
+              window.setTimeout(() => {
+                if (editorView.isDestroyed) {
+                  return;
+                }
+
+                const current = flashKey.getState(editorView.state);
+
+                if (current?.until === until) {
+                  editorView.dispatch(
+                    editorView.state.tr.setMeta(flashKey, null)
+                  );
+                }
+              }, MIRROR_FLASH_MS + 50);
+            });
           }
 
           return {
             destroy: () => {
+              unregisterFlash?.();
+
               if (documentId) {
                 BilingualStore.unregisterEditor(documentId);
               }

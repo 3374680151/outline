@@ -15,7 +15,10 @@ import {
   translateWithFallback,
 } from "@server/services/translation/registry";
 import { lookupWordWithAI } from "@server/services/translation/providers/openaiCompatible";
-import { lookupWord, wordCacheKey } from "@server/services/translation/wordDictionary";
+import {
+  lookupWord,
+  wordCacheKey,
+} from "@server/services/translation/wordDictionary";
 import { loadTeamTranslationConfig } from "@server/services/translation/teamConfig";
 import * as T from "./schema";
 
@@ -74,8 +77,13 @@ router.post(
   rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
   validate(T.TranslationsTranslateSchema),
   async (ctx: APIContext<T.TranslationsTranslateReq>) => {
-    const { text, texts: bodyTexts, from, to, provider: providerId } =
-      ctx.input.body;
+    const {
+      text,
+      texts: bodyTexts,
+      from,
+      to,
+      provider: providerId,
+    } = ctx.input.body;
     const { user } = ctx.state.auth;
 
     const input = bodyTexts ?? (text !== undefined ? [text] : []);
@@ -95,7 +103,9 @@ router.post(
 
     const providerKey = provider?.id ?? "chain";
     const fromKey = from ?? "auto";
-    const results: (string | undefined)[] = Array.from({ length: input.length });
+    const results: (string | undefined)[] = Array.from({
+      length: input.length,
+    });
     const misses: { index: number; text: string; cacheKey: string }[] = [];
 
     await Promise.all(
@@ -147,11 +157,7 @@ router.post(
             results[miss.index] = value;
 
             return value
-              ? CacheHelper.setData(
-                  miss.cacheKey,
-                  value,
-                  TRANSLATION_CACHE_TTL
-                )
+              ? CacheHelper.setData(miss.cacheKey, value, TRANSLATION_CACHE_TTL)
               : Promise.resolve();
           })
         );
@@ -240,8 +246,18 @@ router.post(
 
     // Last tier: plain translation via the provider fallback chain.
     try {
-      const results = await translateWithFallback([word], "en", to, new AbortController().signal);
-      result = { available: true, source: "mt-fallback", entry: null, translation: results.results[0] ?? "" };
+      const results = await translateWithFallback(
+        [word],
+        "en",
+        to,
+        new AbortController().signal
+      );
+      result = {
+        available: true,
+        source: "mt-fallback",
+        entry: null,
+        translation: results.results[0] ?? "",
+      };
       await CacheHelper.setData(cacheKey, result, TRANSLATION_CACHE_TTL);
     } catch (err) {
       Logger.warn("translations.word mt fallback failed", { err });

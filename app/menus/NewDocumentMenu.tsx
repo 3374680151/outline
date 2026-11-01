@@ -98,7 +98,7 @@ const SplitButton = styled.div`
   display: inline-flex;
   align-items: stretch;
 
-  ${'button'}:first-child {
+  ${"button"}:first-child {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
   }

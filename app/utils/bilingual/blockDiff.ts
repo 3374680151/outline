@@ -25,7 +25,9 @@ export type BlockOp =
  * @returns The comparison key.
  */
 function blockKey(block: BlockSignature): string {
-  return block.level === undefined ? block.type : `${block.type}:${block.level}`;
+  return block.level === undefined
+    ? block.type
+    : `${block.type}:${block.level}`;
 }
 
 /**

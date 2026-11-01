@@ -7,16 +7,17 @@ import type { Node as ProseMirrorNode } from "prosemirror-model";
 import Extension from "@shared/editor/lib/Extension";
 import depths from "@shared/styles/depths";
 import type { GrammarMatchDTO } from "@shared/types/bilingual";
+import GrammarAssist from "~/editor/components/GrammarAssist";
 import BilingualStore from "~/stores/BilingualStore";
-import GrammarTooltip from "~/editor/components/GrammarTooltip";
 import Logger from "~/utils/Logger";
 import { blockRange, blockRangeInDoc } from "~/utils/bilingual/editorBlocks";
 import { textHash } from "~/utils/bilingual/hash";
 import { pmRangeForOffset } from "~/utils/bilingual/offsetTable";
 import {
-  clampPanelPosition,
-  mountReactOverlay,
-} from "~/utils/bilingual/overlay";
+  clearActiveGrammarExtension,
+  setActiveGrammarExtension,
+} from "~/utils/bilingual/grammarUi";
+import { mountReactOverlay, editorPaneRect } from "~/utils/bilingual/overlay";
 import { buildParagraphMapFromNode } from "~/utils/bilingual/prosemirrorText";
 import {
   addGrammarIgnoredRule,
@@ -52,10 +53,12 @@ interface RawMatch {
   textHash: string;
 }
 
-/** An ordered issue reference used by the panel and prev/next navigation. */
+/** An ordered issue reference used by the issue panel and navigation. */
 export interface GrammarIssueRef {
   blockIndex: number;
   match: GrammarMatchDTO;
+  /** Hash of the block text at check time, used to resolve the range. */
+  textHash: string;
 }
 
 /** Debounce for grammar checks after typing, in milliseconds. */
@@ -74,9 +77,10 @@ function categoryClass(match: GrammarMatchDTO): string {
 
 /**
  * Grammar check extension: extracts paragraph text, batches it through the
- * Outline grammar API (LanguageTool), and renders click-to-open underline
- * decorations. Only visible blocks are checked on mount; typing re-checks
- * changed paragraphs after a debounce. One-click fixes are ordinary
+ * Outline grammar API (LanguageTool), and renders click-to-locate underline
+ * decorations. Underlines are locators only: clicking one opens the shared
+ * issue panel (floating badge in the pane's corner) focused on that issue,
+ * and every fix happens from the panel. One-click fixes are ordinary
  * transactions so they participate in undo.
  */
 export default class GrammarCheckExtension extends Extension<GrammarCheckOptions> {
@@ -91,6 +95,25 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   /** Whether the grammar service is currently unavailable. */
   @observable
   unavailable = false;
+
+  /** Whether the issue panel is currently open. */
+  @observable
+  panelOpen = false;
+
+  /** Index into {@link listIssues} of the issue highlighted in the text. */
+  @observable
+  activeIssueIndex: number | null = null;
+
+  /** How many issues were fixed through the panel since the last reset. */
+  @observable
+  fixedCount = 0;
+
+  /**
+   * Bumped whenever the stored matches change, so observers of the issue
+   * list re-render even when the total count stays the same.
+   */
+  @observable
+  revision = 0;
 
   private key = new PluginKey<DecorationSet>("bilingual-grammar");
 
@@ -114,6 +137,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
               this.refreshDecorations();
             }
           }, 150);
+          this.syncAssistOverlay();
           return;
         }
 
@@ -121,6 +145,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
         this.sentHashByBlock.clear();
         this.refreshDecorations();
         this.notifyIssueCount();
+        this.syncAssistOverlay();
 
         const view = this.editor?.view;
 
@@ -138,13 +163,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   private sentHashByBlock = new Map<number, string>();
   private queue = new Set<number>();
   private checkTimer: ReturnType<typeof setTimeout> | null = null;
-  private tooltipOverlay: ReturnType<typeof mountReactOverlay> | null = null;
-  private tooltipAnchor: {
-    match: GrammarMatchDTO;
-    blockIndex: number;
-    textHash: string;
-  } | null = null;
-  private repositionRaf = 0;
+  private assistOverlay: ReturnType<typeof mountReactOverlay> | null = null;
   private visibilityObserver: BlockVisibilityObserver | null = null;
   private prefsDisposer: (() => void) | null = null;
 
@@ -181,7 +200,11 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     for (const index of [...this.matchesByBlock.keys()].sort((a, b) => a - b)) {
       for (const raw of this.matchesByBlock.get(index) ?? []) {
-        issues.push({ blockIndex: index, match: raw.match });
+        issues.push({
+          blockIndex: index,
+          match: raw.match,
+          textHash: raw.textHash,
+        });
       }
     }
 
@@ -189,11 +212,224 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   }
 
   /**
-   * Scrolls an issue into view and opens its card.
+   * Scrolls an issue into view and focuses it in the panel.
    *
    * @param issue The issue to reveal.
    */
   revealIssue(issue: GrammarIssueRef) {
+    const index = this.listIssues().findIndex(
+      (ref) => ref.blockIndex === issue.blockIndex && ref.match === issue.match
+    );
+
+    if (index >= 0) {
+      this.focusIssue(index);
+    }
+  }
+
+  /**
+   * Opens the issue panel and focuses an issue by its position in
+   * {@link listIssues}, scrolling the text into view.
+   *
+   * @param index The issue index.
+   */
+  focusIssue(index: number) {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return;
+    }
+
+    runInAction(() => {
+      this.panelOpen = true;
+      this.activeIssueIndex = index;
+    });
+    this.scrollIssueIntoView(issue);
+    this.refreshDecorations();
+  }
+
+  /**
+   * Highlights an issue in the text without changing the panel's open
+   * state, used when a panel row is clicked.
+   *
+   * @param index The issue index.
+   */
+  focusIssueInText(index: number) {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return;
+    }
+
+    runInAction(() => {
+      this.activeIssueIndex = index;
+    });
+    this.scrollIssueIntoView(issue);
+    this.refreshDecorations();
+  }
+
+  /**
+   * Moves the text focus to the previous or next open issue.
+   *
+   * @param delta -1 for the previous issue, 1 for the next.
+   */
+  moveFocus(delta: number) {
+    const issues = this.listIssues();
+
+    if (issues.length === 0) {
+      return;
+    }
+
+    const next =
+      this.activeIssueIndex === null
+        ? delta > 0
+          ? 0
+          : issues.length - 1
+        : Math.min(
+            issues.length - 1,
+            Math.max(0, this.activeIssueIndex + delta)
+          );
+
+    this.focusIssueInText(next);
+  }
+
+  /**
+   * Opens the issue panel.
+   */
+  openPanel() {
+    runInAction(() => {
+      this.panelOpen = true;
+    });
+  }
+
+  /**
+   * Closes the issue panel and clears the text highlight.
+   */
+  closePanel() {
+    runInAction(() => {
+      this.panelOpen = false;
+      this.activeIssueIndex = null;
+    });
+    this.refreshDecorations();
+  }
+
+  /**
+   * Applies a replacement for the issue at the given panel index and
+   * advances the focus to the next open issue.
+   *
+   * @param index The issue index into {@link listIssues}.
+   * @param value The replacement text.
+   * @returns True when the fix was applied.
+   */
+  applyFixAt(index: number, value: string): boolean {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return false;
+    }
+
+    const applied = this.applyFix(
+      issue.match,
+      issue.blockIndex,
+      issue.textHash,
+      value
+    );
+
+    if (!applied) {
+      return false;
+    }
+
+    runInAction(() => {
+      this.fixedCount += 1;
+    });
+    this.advanceFocusAfterRemoval(index);
+    return true;
+  }
+
+  /**
+   * Skips a single occurrence of the issue at the given index and advances
+   * the focus.
+   *
+   * @param index The issue index into {@link listIssues}.
+   */
+  skipIssueAt(index: number) {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return;
+    }
+
+    this.skipIssue(issue);
+    this.advanceFocusAfterRemoval(index);
+  }
+
+  /**
+   * Ignores the rule behind the issue at the given index for this user;
+   * every occurrence of the rule disappears.
+   *
+   * @param index The issue index into {@link listIssues}.
+   */
+  ignoreRuleAt(index: number) {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return;
+    }
+
+    addGrammarIgnoredRule(issue.match.rule.id);
+    this.removeMatchesByRule(issue.match.rule.id);
+    this.refreshDecorations();
+    this.advanceFocusAfterRemoval(index);
+  }
+
+  /**
+   * Whether the issue at the given index can be fixed with an automatic
+   * replacement; issues spanning formatting boundaries cannot.
+   *
+   * @param index The issue index into {@link listIssues}.
+   * @returns True when an automatic fix is possible.
+   */
+  canAutoFixAt(index: number): boolean {
+    const issue = this.listIssues()[index];
+
+    if (!issue) {
+      return false;
+    }
+
+    const resolved = this.resolveRange(
+      issue.match,
+      issue.blockIndex,
+      issue.textHash
+    );
+    return !!resolved && !resolved.crossesGap;
+  }
+
+  /**
+   * The visible rectangle of the editor's scroll pane, used by the floating
+   * badge and panel to pin themselves to the pane's corner.
+   *
+   * @returns The pane rect in viewport coordinates, or null.
+   */
+  paneRect(): {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  } | null {
+    const view = this.editor?.view;
+
+    if (!view) {
+      return null;
+    }
+
+    return editorPaneRect(view);
+  }
+
+  /**
+   * Scrolls the block containing an issue to the center of the pane.
+   *
+   * @param issue The issue to reveal.
+   */
+  private scrollIssueIntoView(issue: GrammarIssueRef) {
     const view = this.editor?.view;
 
     if (!view) {
@@ -210,10 +446,31 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     const element =
       dom.node instanceof Element ? dom.node : dom.node.parentElement;
     element?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
 
-    const hash =
-      this.textHashFor(issue.blockIndex) ?? textHash(range.node.textContent);
-    this.openTooltip(issue.match, issue.blockIndex, hash);
+  /**
+   * Moves the panel focus to the next open issue after one was removed,
+   * or clears the highlight when the document is clean.
+   *
+   * @param index The index the issue was removed from.
+   */
+  private advanceFocusAfterRemoval(index: number) {
+    const remaining = this.listIssues();
+
+    if (remaining.length === 0) {
+      runInAction(() => {
+        this.activeIssueIndex = null;
+      });
+      this.refreshDecorations();
+      return;
+    }
+
+    const nextIndex = Math.min(index, remaining.length - 1);
+    runInAction(() => {
+      this.activeIssueIndex = nextIndex;
+    });
+    this.scrollIssueIntoView(remaining[nextIndex]);
+    this.refreshDecorations();
   }
 
   /**
@@ -227,6 +484,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     this.matchesByBlock.clear();
     this.sentHashByBlock.clear();
+    runInAction(() => {
+      this.activeIssueIndex = null;
+      this.fixedCount = 0;
+    });
     this.refreshDecorations();
     this.notifyIssueCount();
 
@@ -263,9 +524,11 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
           init: () => DecorationSet.empty,
           apply: (tr, value, oldState, newState) => {
             if (tr.docChanged) {
-              // Typing immediately leaves review mode: the card would
+              // Typing immediately leaves review mode: the highlight would
               // otherwise drift away from the text it describes.
-              this.closeTooltip();
+              runInAction(() => {
+                this.activeIssueIndex = null;
+              });
               this.scheduleRecheck(oldState, newState);
             }
 
@@ -274,9 +537,12 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
         },
         props: {
           decorations: (state: EditorState) =>
-            this.enabled ? this.buildDecorationSet(state.doc) : DecorationSet.empty,
+            this.enabled
+              ? this.buildDecorationSet(state.doc)
+              : DecorationSet.empty,
           handleDOMEvents: {
-            // Clicking an underline opens its issue card.
+            // Clicking an underline locates the issue: the panel opens
+            // focused on it, and fixing happens from the panel.
             mousedown: (view: EditorView, event: MouseEvent) => {
               const target = event.target as HTMLElement;
 
@@ -315,10 +581,17 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
                   coords.pos >= resolved.pmStart &&
                   coords.pos <= resolved.pmEnd
                 ) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  this.openTooltip(raw.match, blockIndex, raw.textHash);
-                  return true;
+                  const index = this.listIssues().findIndex(
+                    (ref) =>
+                      ref.blockIndex === blockIndex && ref.match === raw.match
+                  );
+
+                  if (index >= 0) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.focusIssue(index);
+                    return true;
+                  }
                 }
               }
 
@@ -330,6 +603,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
           // Underlines render through raw DOM decorations, so the stylesheet
           // is injected from here rather than from a scene.
           ensureBilingualStyles();
+          this.syncAssistOverlay();
 
           if (this.enabled) {
             this.visibilityObserver = observeBlockVisibility(
@@ -339,7 +613,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
                   this.queue.add(index);
                 }
                 this.scheduleCheck();
-              },
+              }
             );
           }
 
@@ -361,7 +635,7 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
               this.visibilityObserver?.disconnect();
               this.visibilityObserver = null;
-              this.closeTooltip();
+              this.destroyAssistOverlay();
               this.prefsDisposer?.();
               this.prefsDisposer = null;
             },
@@ -388,8 +662,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     const max = Math.max(oldDoc.childCount, newDoc.childCount);
 
     for (let i = 0; i < max; i++) {
-      const oldText = i < oldDoc.childCount ? oldDoc.child(i).textContent : null;
-      const newText = i < newDoc.childCount ? newDoc.child(i).textContent : null;
+      const oldText =
+        i < oldDoc.childCount ? oldDoc.child(i).textContent : null;
+      const newText =
+        i < newDoc.childCount ? newDoc.child(i).textContent : null;
 
       if (oldText !== newText) {
         this.matchesByBlock.delete(i);
@@ -406,7 +682,6 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
    * Debounces the check queue flush.
    */
   private scheduleCheck() {
-
     if (!this.enabled) {
       return;
     }
@@ -427,7 +702,6 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   private async flush() {
     const view = this.editor?.view;
 
-
     if (!view || !this.enabled) {
       return;
     }
@@ -437,7 +711,9 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     this.queue.clear();
     const indexes = queued.slice(0, MAX_BLOCKS_PER_FLUSH);
     // Any remainder goes back in the queue; the next flush picks it up.
-    queued.slice(MAX_BLOCKS_PER_FLUSH).forEach((index) => this.queue.add(index));
+    queued
+      .slice(MAX_BLOCKS_PER_FLUSH)
+      .forEach((index) => this.queue.add(index));
 
     const batch: { index: number; text: string; hash: string }[] = [];
 
@@ -489,7 +765,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     try {
       results = await BilingualStore.grammarCheckBatch({
-        items: batch.map((item) => ({ id: String(item.index), text: item.text })),
+        items: batch.map((item) => ({
+          id: String(item.index),
+          text: item.text,
+        })),
         language: this.options.language,
         level: currentLevel,
         mode: "all",
@@ -590,6 +869,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
     }
 
     const decorations: Decoration[] = [];
+    const active =
+      this.activeIssueIndex !== null
+        ? this.listIssues()[this.activeIssueIndex]
+        : null;
 
     for (const [index, rawMatches] of this.matchesByBlock) {
       if (index >= doc.childCount) {
@@ -605,15 +888,23 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
       const map = buildParagraphMapFromNode(range.node, range.from);
 
       for (const raw of rawMatches) {
-        const resolved = pmRangeForOffset(map, raw.match.offset, raw.match.length);
+        const resolved = pmRangeForOffset(
+          map,
+          raw.match.offset,
+          raw.match.length
+        );
 
         if (!resolved) {
           continue;
         }
 
+        const focused =
+          !!active && active.blockIndex === index && active.match === raw.match;
         decorations.push(
           Decoration.inline(resolved.pmStart, resolved.pmEnd, {
-            class: `bilingual-underline ${categoryClass(raw.match)}`,
+            class: `bilingual-underline ${categoryClass(raw.match)}${
+              focused ? " bilingual-grammar-focus" : ""
+            }`,
           })
         );
       }
@@ -647,167 +938,35 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   }
 
   /**
-   * Opens the issue card for a match, anchored to the match inside the
-   * editor and repositioned as the surrounding pane scrolls.
-   *
-   * @param match The grammar match.
-   * @param blockIndex The block the match belongs to.
-   * @param matchTextHash Hash of the block text at check time.
+   * Mounts or unmounts the floating badge and issue panel overlay so it
+   * matches the current enabled state, and keeps the active-extension
+   * registry in sync for UI that lives outside this editor.
    */
-  private openTooltip(match: GrammarMatchDTO, blockIndex: number, matchTextHash: string) {
-    const view = this.editor?.view;
-    const resolved = this.resolveRange(match, blockIndex, matchTextHash);
+  private syncAssistOverlay() {
+    const shouldMount = this.enabled && !!this.editor?.view;
 
-    if (!view || !resolved) {
-      return;
+    if (shouldMount && !this.assistOverlay) {
+      setActiveGrammarExtension(this);
+      this.assistOverlay = mountReactOverlay(depths.popover);
+      this.assistOverlay.render(<GrammarAssist extension={this} />);
+    } else if (!shouldMount && this.assistOverlay) {
+      this.destroyAssistOverlay();
     }
 
-    this.closeTooltip();
-
-    const overlay = mountReactOverlay(depths.tooltip);
-    this.tooltipOverlay = overlay;
-    this.tooltipAnchor = { match, blockIndex, textHash: matchTextHash };
-
-    const issues = this.listIssues();
-    const position = issues.findIndex(
-      (issue) => issue.blockIndex === blockIndex && issue.match === match
-    );
-
-    const handleClose = () => this.closeTooltip();
-
-    const handleSkip = () => {
-      this.skipIssue({ blockIndex, match });
-      handleClose();
-    };
-
-    const handleIgnore = () => {
-      addGrammarIgnoredRule(match.rule.id);
-      this.removeMatchesByRule(match.rule.id);
-      this.refreshDecorations();
-      handleClose();
-    };
-
-    const handleFix = (value: string) => {
-      const applied = this.applyFix(match, blockIndex, matchTextHash, value);
-
-      if (applied) {
-        // Auto-advance to the next open issue, mirroring the review flow of
-        // LanguageTool's fix card.
-        const next = issues[position + 1];
-
-        if (next) {
-          // Let the fix transaction render before moving the card.
-          setTimeout(() => this.revealIssue(next), 0);
-        } else {
-          handleClose();
-        }
-      }
-    };
-
-    overlay.render(
-      <GrammarTooltip
-        match={match}
-        canFix={!resolved.crossesGap}
-        replacements={match.replacements.map((replacement) => replacement.value)}
-        positionLabel={
-          position >= 0 ? `${position + 1}/${issues.length}` : undefined
-        }
-        onFix={handleFix}
-        onSkip={handleSkip}
-        onIgnore={handleIgnore}
-        onClose={handleClose}
-      />
-    );
-
-    this.positionTooltip(view, resolved.pmStart);
-    this.listenForReposition();
+    if (!shouldMount) {
+      clearActiveGrammarExtension(this);
+    }
   }
 
   /**
-   * Positions the open card against an editor position.
-   *
-   * @param view The editor view.
-   * @param pos The position to anchor to.
+   * Unmounts the badge and panel overlay.
    */
-  private positionTooltip(view: EditorView, pos: number) {
-    if (!this.tooltipOverlay) {
-      return;
-    }
+  private destroyAssistOverlay() {
+    clearActiveGrammarExtension(this);
 
-    let anchor;
-
-    try {
-      anchor = view.coordsAtPos(pos);
-    } catch (_err) {
-      // The position can be invalid while the document is changing.
-      return;
-    }
-
-    const position = clampPanelPosition(
-      {
-        left: anchor.left,
-        right: anchor.right,
-        top: anchor.top,
-        bottom: anchor.bottom,
-      },
-      { width: 360, height: 200 }
-    );
-    this.tooltipOverlay.container.style.left = `${position.left}px`;
-    this.tooltipOverlay.container.style.top = `${position.top}px`;
-  }
-
-  /**
-   * Keeps the open card glued to its anchor while any scroll container or
-   * the window changes size. Frames are merged with a rAF.
-   */
-  private listenForReposition() {
-    const reposition = () => {
-      if (this.repositionRaf) {
-        return;
-      }
-
-      this.repositionRaf = window.requestAnimationFrame(() => {
-        this.repositionRaf = 0;
-        const view = this.editor?.view;
-        const anchor = this.tooltipAnchor;
-
-        if (!view || !anchor || view.isDestroyed) {
-          return;
-        }
-
-        const resolved = this.resolveRange(
-          anchor.match,
-          anchor.blockIndex,
-          anchor.textHash
-        );
-
-        if (!resolved) {
-          // The text the card described is gone; close rather than drift.
-          this.closeTooltip();
-          return;
-        }
-
-        this.positionTooltip(view, resolved.pmStart);
-      });
-    };
-
-    window.addEventListener("scroll", reposition, { capture: true, passive: true });
-    window.addEventListener("resize", reposition);
-
-    const detach = () => {
-      window.removeEventListener("scroll", reposition, { capture: true });
-      window.removeEventListener("resize", reposition);
-    };
-
-    // The overlay destroy callback runs after unmount; piggyback the
-    // listener teardown on the overlay handle.
-    const originalDestroy = this.tooltipOverlay?.destroy.bind(this.tooltipOverlay);
-
-    if (this.tooltipOverlay && originalDestroy) {
-      this.tooltipOverlay.destroy = () => {
-        detach();
-        originalDestroy();
-      };
+    if (this.assistOverlay) {
+      this.assistOverlay.destroy();
+      this.assistOverlay = null;
     }
   }
 
@@ -900,7 +1059,8 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
   }
 
   /**
-   * Drops every stored match (used when checking is switched off).
+   * Drops every stored match (used when checking is switched off) and
+   * resets the review state.
    */
   private clearAllMatches() {
     if (this.matchesByBlock.size === 0 && this.queue.size === 0) {
@@ -909,6 +1069,10 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     this.matchesByBlock.clear();
     this.queue.clear();
+    runInAction(() => {
+      this.activeIssueIndex = null;
+      this.fixedCount = 0;
+    });
     this.notifyIssueCount();
     this.refreshDecorations();
   }
@@ -925,23 +1089,8 @@ export default class GrammarCheckExtension extends Extension<GrammarCheckOptions
 
     runInAction(() => {
       this.issueCount = count;
+      this.revision += 1;
     });
     this.options.onIssueCountChange?.(count);
-  }
-
-  /**
-   * Closes and unmounts the tooltip overlay.
-   */
-  closeTooltip() {
-    if (this.repositionRaf) {
-      window.cancelAnimationFrame(this.repositionRaf);
-      this.repositionRaf = 0;
-    }
-
-    if (this.tooltipOverlay) {
-      this.tooltipAnchor = null;
-      this.tooltipOverlay.destroy();
-      this.tooltipOverlay = null;
-    }
   }
 }

@@ -84,7 +84,8 @@ const deepl: TranslationProvider = {
 
     return {
       results: data.translations.map((translation) => translation.text),
-      detectedFrom: data.translations[0]?.detected_source_language?.toLowerCase(),
+      detectedFrom:
+        data.translations[0]?.detected_source_language?.toLowerCase(),
     };
   },
 };

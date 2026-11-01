@@ -103,7 +103,11 @@ import {
   trashPath,
   documentEditPath,
 } from "~/utils/routeHelpers";
-import { getFocusedSplitPane, openBilingualRoute, openRouteInSplit } from "~/utils/splitView";
+import {
+  getFocusedSplitPane,
+  openBilingualRoute,
+  openRouteInSplit,
+} from "~/utils/splitView";
 import { ensureBilingualPair } from "~/components/BilingualPairProvider";
 import { recentDocuments } from "~/components/CommandBar/useRecentDocumentActions";
 import { documentBreadcrumbText } from "~/components/DocumentBreadcrumb";

@@ -7,6 +7,7 @@ import { autoTranslateOnOpen } from "./prefs";
 import { textHash } from "./hash";
 import { canAutoWrite, reduceBlockState } from "./statusMachine";
 import { applyBlockOps, diffTopLevelBlocks } from "./blockDiff";
+import { flashMirrorBlock } from "./mirrorFlash";
 import type { BlockSignature } from "./blockDiff";
 import {
   blockText,
@@ -495,7 +496,7 @@ export class MirrorEngine {
     const nodeType =
       op.signature.type === "heading"
         ? schema.nodes.heading
-        : schema.nodes[op.signature.type] ?? schema.nodes.paragraph;
+        : (schema.nodes[op.signature.type] ?? schema.nodes.paragraph);
 
     if (!nodeType) {
       return;
@@ -555,13 +556,20 @@ export class MirrorEngine {
       // Unchanged since the last translation (covers blocks that only
       // shifted position after a structural edit). Forced reconciliation
       // skips the last-seen shortcut so stored hashes are checked directly.
-      if (!force && (hashes[i] === this.lastTextHashes[i] || hashes[i] === state.sourceHash)) {
+      if (
+        !force &&
+        (hashes[i] === this.lastTextHashes[i] || hashes[i] === state.sourceHash)
+      ) {
         continue;
       }
 
       // A failed attempt stores the hash of the text it tried to translate,
       // so on forced reconciliation a failed block must still be re-queued.
-      if (force && hashes[i] === state.sourceHash && state.status !== "failed") {
+      if (
+        force &&
+        hashes[i] === state.sourceHash &&
+        state.status !== "failed"
+      ) {
         continue;
       }
 
@@ -647,7 +655,7 @@ export class MirrorEngine {
       }));
       batch.forEach((item) => this.forced.delete(item.index));
       // Skip fragments produced mid-typing; a full sentence follows shortly.
-    const translatable = batch.filter((item) => item.text.trim().length >= 2);
+      const translatable = batch.filter((item) => item.text.trim().length >= 2);
 
       for (const item of translatable) {
         const state = this.blockStates[item.index] ?? emptyState();
@@ -791,11 +799,9 @@ export class MirrorEngine {
     if (!forced && !canAutoWrite({ ...state, autoText: expected }, current)) {
       // The mirror content was written by a human – keep it.
       this.humanEdited.add(index);
-      this.blockStates[index] = reduceBlockState(
-        state,
-        true,
-        { type: "targetManuallyEdited" }
-      );
+      this.blockStates[index] = reduceBlockState(state, true, {
+        type: "targetManuallyEdited",
+      });
       this.markDirty(index);
       this.updateProgress();
       return true;
@@ -840,6 +846,7 @@ export class MirrorEngine {
     this.markDirty(index);
     this.updateProgress();
     this.schedulePersist();
+    flashMirrorBlock(index);
   }
 
   /**
@@ -888,11 +895,9 @@ export class MirrorEngine {
     const state = this.blockStates[index] ?? emptyState();
 
     if (state.status !== "pending") {
-      this.blockStates[index] = reduceBlockState(
-        state,
-        true,
-        { type: "targetManuallyEdited" }
-      );
+      this.blockStates[index] = reduceBlockState(state, true, {
+        type: "targetManuallyEdited",
+      });
       this.markDirty(index);
       this.updateProgress();
     }
@@ -1338,9 +1343,7 @@ export class MirrorEngine {
 
     const ordered = [...visible, ...hidden];
     const queued =
-      autoTranslateOnOpen() || this.translateQueue.size > 0
-        ? ordered
-        : visible;
+      autoTranslateOnOpen() || this.translateQueue.size > 0 ? ordered : visible;
 
     for (const index of queued) {
       this.translateQueue.add(index);

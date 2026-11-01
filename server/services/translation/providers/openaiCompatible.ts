@@ -13,7 +13,7 @@ const SYSTEM_PROMPT = [
   "You are a translation engine.",
   "Translate each text from the JSON input into the requested target language.",
   "Preserve inline code, formulas, and proper nouns.",
-  "Respond with JSON only, in the form {\"translations\": [\"...\", ...]} with exactly",
+  'Respond with JSON only, in the form {"translations": ["...", ...]} with exactly',
   "one entry per input text, in the same order.",
 ].join(" ");
 
@@ -107,7 +107,10 @@ const openaiCompatible: TranslationProvider = {
     const parsed = parseJsonObject(content);
     const translations = parsed?.translations;
 
-    if (!Array.isArray(translations) || translations.length !== req.texts.length) {
+    if (
+      !Array.isArray(translations) ||
+      translations.length !== req.texts.length
+    ) {
       throw new Error("openai-compatible returned an unexpected payload");
     }
 
@@ -165,13 +168,18 @@ export async function lookupWordWithAI(
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: DICT_SYSTEM_PROMPT },
-        { role: "user", content: "词语：" + word + (context ? "\n上下文：" + context : "") },
+        {
+          role: "user",
+          content: "词语：" + word + (context ? "\n上下文：" + context : ""),
+        },
       ],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`openai-compatible dictionary responded ${response.status}`);
+    throw new Error(
+      `openai-compatible dictionary responded ${response.status}`
+    );
   }
 
   const data = (await response.json()) as {
@@ -185,14 +193,22 @@ export async function lookupWordWithAI(
 
   return {
     word: String(parsed.word ?? word),
-    ...(typeof parsed.phonetic === "string" && parsed.phonetic ? { phonetic: parsed.phonetic } : {}),
+    ...(typeof parsed.phonetic === "string" && parsed.phonetic
+      ? { phonetic: parsed.phonetic }
+      : {}),
     senses: (parsed.senses as { pos?: string; meaning?: string }[])
       .slice(0, 4)
-      .map((sense) => ({ pos: String(sense.pos ?? ""), meaning: String(sense.meaning ?? "") })),
+      .map((sense) => ({
+        pos: String(sense.pos ?? ""),
+        meaning: String(sense.meaning ?? ""),
+      })),
     examples: Array.isArray(parsed.examples)
       ? (parsed.examples as { src?: string; dst?: string }[])
           .slice(0, 2)
-          .map((example) => ({ src: String(example.src ?? ""), dst: String(example.dst ?? "") }))
+          .map((example) => ({
+            src: String(example.src ?? ""),
+            dst: String(example.dst ?? ""),
+          }))
       : [],
   };
 }

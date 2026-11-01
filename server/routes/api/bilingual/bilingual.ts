@@ -119,7 +119,14 @@ router.post(
       includeState: false,
       includeViews: false,
       // createdById is required by the access filter for unattached drafts.
-      attributes: ["id", "title", "collectionId", "createdById", "icon", "color"],
+      attributes: [
+        "id",
+        "title",
+        "collectionId",
+        "createdById",
+        "icon",
+        "color",
+      ],
     });
     const documentsById = new Map(documents.map((doc) => [doc.id, doc]));
 
@@ -127,10 +134,8 @@ router.post(
       data: {
         pairs: pairs.map((pair) => ({
           ...presentBilingualPair(pair),
-          sourceTitle:
-            documentsById.get(pair.sourceDocumentId)?.title ?? "",
-          targetTitle:
-            documentsById.get(pair.targetDocumentId)?.title ?? "",
+          sourceTitle: documentsById.get(pair.sourceDocumentId)?.title ?? "",
+          targetTitle: documentsById.get(pair.targetDocumentId)?.title ?? "",
           sourceCollectionId:
             documentsById.get(pair.sourceDocumentId)?.collectionId ?? null,
           sourceIcon: documentsById.get(pair.sourceDocumentId)?.icon ?? null,
@@ -228,12 +233,14 @@ router.post(
     // rebuild the state array, preserving state for surviving indices.
     const sourceBlocks = source.content?.content?.length ?? 0;
     const existing = pair.blockStates ?? [];
-    const blockStates = Array.from({ length: sourceBlocks }, (_, index) =>
-      existing[index] ?? {
-        status: "empty",
-        sourceHash: "",
-        autoText: "",
-      }
+    const blockStates = Array.from(
+      { length: sourceBlocks },
+      (_, index) =>
+        existing[index] ?? {
+          status: "empty",
+          sourceHash: "",
+          autoText: "",
+        }
     );
 
     pair.set("blockStates", blockStates);

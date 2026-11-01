@@ -67,7 +67,8 @@ router.post(
     const team = await Team.findByPk(user.teamId, {
       attributes: ["id", "preferences"],
     });
-    const teamDisabled = team?.getPreference(TeamPreference.GrammarDisabledRules) ?? "";
+    const teamDisabled =
+      team?.getPreference(TeamPreference.GrammarDisabledRules) ?? "";
     const allDisabled = [teamDisabled, disabledRules]
       .filter((entry) => !!entry)
       .join(",");
@@ -158,7 +159,12 @@ interface BatchResult {
  */
 async function checkConcurrently(
   items: { id: string; text: string; cacheKey: string }[],
-  params: { language: string; level: string; mode: string; baseUrl: string | null },
+  params: {
+    language: string;
+    level: string;
+    mode: string;
+    baseUrl: string | null;
+  },
   disabledRules: string
 ): Promise<BatchResult[]> {
   const results = new Map<number, BatchResult>();
@@ -219,8 +225,13 @@ async function checkConcurrently(
     Array.from({ length: Math.min(concurrency, items.length) }, worker)
   );
 
-  return items.map((item, index) =>
-    results.get(index) ?? { id: item.id, available: false, reason: "unavailable" }
+  return items.map(
+    (item, index) =>
+      results.get(index) ?? {
+        id: item.id,
+        available: false,
+        reason: "unavailable",
+      }
   );
 }
 
@@ -236,7 +247,8 @@ router.post(
     const team = await Team.findByPk(user.teamId, {
       attributes: ["id", "preferences"],
     });
-    const teamDisabled = team?.getPreference(TeamPreference.GrammarDisabledRules) ?? "";
+    const teamDisabled =
+      team?.getPreference(TeamPreference.GrammarDisabledRules) ?? "";
     const allDisabled = [teamDisabled, disabledRules]
       .filter((entry) => !!entry)
       .join(",");
@@ -271,7 +283,12 @@ router.post(
     if (misses.length > 0) {
       const checked = await checkConcurrently(
         misses,
-        { language, level, mode, baseUrl: await languageToolBaseUrl(user.teamId) },
+        {
+          language,
+          level,
+          mode,
+          baseUrl: await languageToolBaseUrl(user.teamId),
+        },
         allDisabled
       );
       results.push(...checked);

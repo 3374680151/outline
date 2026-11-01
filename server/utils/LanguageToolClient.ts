@@ -160,8 +160,7 @@ class LanguageToolClient {
       this.consecutiveFailures++;
 
       if (this.consecutiveFailures >= LanguageToolClient.failureThreshold) {
-        this.breakerOpenUntil =
-          Date.now() + LanguageToolClient.breakerOpenMs;
+        this.breakerOpenUntil = Date.now() + LanguageToolClient.breakerOpenMs;
         this.consecutiveFailures = 0;
         Logger.warn(
           "LanguageTool circuit breaker opened after repeated failures"
@@ -243,9 +242,7 @@ function whitelistMatch(match: Record<string, unknown>): GrammarMatch {
         id: String(rule?.category?.id ?? ""),
         name: String(rule?.category?.name ?? ""),
       },
-      ...(rule?.isPremium !== undefined
-        ? { isPremium: rule.isPremium }
-        : {}),
+      ...(rule?.isPremium !== undefined ? { isPremium: rule.isPremium } : {}),
     },
   };
 }

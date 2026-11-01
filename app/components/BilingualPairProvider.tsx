@@ -92,7 +92,6 @@ export function useBilingualPair(): BilingualPairContextValue {
  * the mirror title in sync with the source title.
  */
 
-
 export const BilingualPairProvider = observer(function BilingualPairProvider({
   children,
 }: {
@@ -104,9 +103,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
   const [pair, setPair] = React.useState<BilingualPairDTO | null>(null);
   const [pairSettled, setPairSettled] = React.useState(false);
   /** Grammar extensions keyed by their document id (two panes coexist). */
-  const grammarByDoc = React.useRef(
-    new Map<string, GrammarCheckExtension>()
-  );
+  const grammarByDoc = React.useRef(new Map<string, GrammarCheckExtension>());
   const [, bumpGrammarSlot] = React.useState(0);
 
   const requested = useLocationSelector((location) =>
@@ -120,7 +117,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       location.pathname
     );
     const slug = match?.[0].slice("/doc/".length);
-    return slug ? documents.get(slug)?.id ?? null : null;
+    return slug ? (documents.get(slug)?.id ?? null) : null;
   });
   // The split parameter holds a document path (urlId slug), so it must be
   // resolved through the store to compare against the pair's document ids.
@@ -131,9 +128,11 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       return null;
     }
 
-    const match = /^\/doc\/([0-9a-zA-Z-_~]*-[a-zA-Z0-9]{10,15})/.exec(splitPath);
+    const match = /^\/doc\/([0-9a-zA-Z-_~]*-[a-zA-Z0-9]{10,15})/.exec(
+      splitPath
+    );
     const slug = match?.[1];
-    return slug ? documents.get(slug)?.id ?? null : null;
+    return slug ? (documents.get(slug)?.id ?? null) : null;
   });
   const primaryDocument = primaryDocumentId
     ? documents.get(primaryDocumentId)
@@ -159,10 +158,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       return;
     }
 
-    if (
-      team &&
-      team.getPreference(TeamPreference.BilingualEditor) === false
-    ) {
+    if (team && team.getPreference(TeamPreference.BilingualEditor) === false) {
       history.replace(setBilingualFlag(history.location.search, false));
       return;
     }
@@ -217,7 +213,9 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
       ? documentPath(target)
       : `/doc/${pair.targetDocumentId}`;
 
-    history.replace(setSplitPath(setBilingualFlag(history.location.search, true), path));
+    history.replace(
+      setSplitPath(setBilingualFlag(history.location.search, true), path)
+    );
   }, [requested, pair, splitPath, documents]);
 
   // If the flag is set but the split pane shows a document that is
@@ -396,7 +394,7 @@ export const BilingualPairProvider = observer(function BilingualPairProvider({
   // The source pane's grammar extension, resolved from the per-document
   // slots so the mirror pane can never clobber it.
   const sourceGrammarExtension = pair
-    ? grammarByDoc.current.get(pair.sourceDocumentId) ?? null
+    ? (grammarByDoc.current.get(pair.sourceDocumentId) ?? null)
     : null;
 
   const value = React.useMemo<BilingualPairContextValue>(

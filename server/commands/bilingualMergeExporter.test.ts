@@ -28,7 +28,10 @@ function state(
 describe("mergeBilingualContent", () => {
   it("interleaves each source paragraph with its translation as a quote", () => {
     const merged = mergeBilingualContent(
-      { type: "doc", content: [paragraph("Hello"), paragraph("World")] } as never,
+      {
+        type: "doc",
+        content: [paragraph("Hello"), paragraph("World")],
+      } as never,
       {
         type: "doc",
         content: [paragraph("你好"), paragraph("世界")],

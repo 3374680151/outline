@@ -252,6 +252,9 @@ function DocumentEditor(props: Props) {
       language: "en-US",
       gate: () =>
         bilingualStateRef.current.side !== "target" &&
+        // The grammar service checks English prose; non-English documents
+        // would only produce noise, matching the preference's description.
+        (!document.language || /^en/i.test(document.language)) &&
         (team?.getPreference(TeamPreference.GrammarChecking) ?? true),
     });
     grammarExtensionRef.current = grammarExtension;
@@ -281,12 +284,7 @@ function DocumentEditor(props: Props) {
     return () => {
       registerGrammarExtension(document.id, null);
     };
-  }, [
-    bilingualActive,
-    registerGrammarExtension,
-    bilingualSide,
-    document.id,
-  ]);
+  }, [bilingualActive, registerGrammarExtension, bilingualSide, document.id]);
 
   return (
     <Flex auto column>

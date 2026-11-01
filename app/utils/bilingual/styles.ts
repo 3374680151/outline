@@ -42,6 +42,25 @@ const CSS = `
   text-decoration-color: #64748b;
   background: rgba(100, 116, 139, 0.07);
 }
+
+.bilingual-grammar-focus {
+  background: rgba(47, 111, 208, 0.16);
+  outline: 2px solid rgba(47, 111, 208, 0.55);
+  border-radius: 2px;
+}
+
+.bilingual-mirror-flash {
+  background: rgba(47, 158, 99, 0.16);
+  outline: 1.5px solid rgba(47, 158, 99, 0.5);
+  border-radius: 3px;
+  transition: background 0.9s ease, outline-color 0.9s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bilingual-mirror-flash {
+    transition: none;
+  }
+}
 `;
 
 /**
