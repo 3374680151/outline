@@ -25,21 +25,15 @@ import history from "~/utils/history";
 import { settingsPath } from "~/utils/routeHelpers";
 import {
   autoTranslateOnOpen,
-  grammarCheckingEnabled,
-  grammarLevel,
   setAutoTranslateOnOpen,
-  setGrammarCheckingEnabled,
-  setGrammarLevel,
   setTranslationTrigger,
   translationTrigger,
 } from "~/utils/bilingual/prefs";
 
 /**
  * The bilingual toolbar: translation progress, structure repair, the save
- * actions, and the per-user experience toggles. Grammar issues are managed
- * from the floating badge in the editor pane corner, not from here. The
- * toolbar renders inside the primary pane's document header while the
- * bilingual view is active.
+ * actions, and the per-user experience toggles. The toolbar renders inside
+ * the primary pane's document header while the bilingual view is active.
  */
 export const BilingualToolbar = observer(function BilingualToolbar({
   document,
@@ -47,7 +41,7 @@ export const BilingualToolbar = observer(function BilingualToolbar({
   document: Document;
 }) {
   const { t } = useTranslation();
-  const { pair, engine, grammarExtension } = useBilingualPair();
+  const { pair, engine } = useBilingualPair();
   const { dialogs, documents, policies, collections } = useStores();
   const [saving, setSaving] = React.useState(false);
 
@@ -55,7 +49,6 @@ export const BilingualToolbar = observer(function BilingualToolbar({
   const hasMismatch = engine?.hasMismatch ?? false;
   const failedCount = engine?.failedCount ?? 0;
   const outdatedManual = engine?.outdatedManualCount ?? 0;
-  const grammarUnavailable = grammarExtension?.unavailable ?? false;
 
   const handleSaveMerged = React.useCallback(async () => {
     if (!pair || saving) {
@@ -227,44 +220,8 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           }),
         ],
       }),
-      createActionWithChildren({
-        name: t("Grammar checking"),
-        section: ActiveDocumentSection,
-        children: [
-          createAction({
-            name: t("Enabled"),
-            section: ActiveDocumentSection,
-            selected: grammarCheckingEnabled(),
-            perform: () => setGrammarCheckingEnabled(true),
-          }),
-          createAction({
-            name: t("Disabled"),
-            section: ActiveDocumentSection,
-            selected: !grammarCheckingEnabled(),
-            perform: () => setGrammarCheckingEnabled(false),
-          }),
-        ],
-      }),
-      createActionWithChildren({
-        name: t("Grammar strictness"),
-        section: ActiveDocumentSection,
-        children: [
-          createAction({
-            name: t("Standard"),
-            section: ActiveDocumentSection,
-            selected: grammarLevel() === "default",
-            perform: () => setGrammarLevel("default"),
-          }),
-          createAction({
-            name: t("Strict (includes style)"),
-            section: ActiveDocumentSection,
-            selected: grammarLevel() === "picky",
-            perform: () => setGrammarLevel("picky"),
-          }),
-        ],
-      }),
       createAction({
-        name: t("Translation & grammar services…"),
+        name: t("Translation services…"),
         section: ActiveDocumentSection,
         icon: <SettingsIcon />,
         perform: () => history.push(settingsPath("ai")),
@@ -319,21 +276,7 @@ export const BilingualToolbar = observer(function BilingualToolbar({
           <span>
             {t("{{count}} blocks failed to translate", { count: failedCount })}
           </span>
-          <RepairButton
-            onClick={() => {
-              engine?.requeueFailed();
-              grammarExtension?.recheckAll();
-            }}
-          >
-            {t("Retry")}
-          </RepairButton>
-        </WarningChip>
-      )}
-      {grammarUnavailable && (
-        <WarningChip>
-          <WarningIcon size={14} />
-          <span>{t("Grammar service unavailable")}</span>
-          <RepairButton onClick={() => grammarExtension?.recheckAll()}>
+          <RepairButton onClick={() => engine?.requeueFailed()}>
             {t("Retry")}
           </RepairButton>
         </WarningChip>

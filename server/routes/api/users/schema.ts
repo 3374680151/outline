@@ -134,11 +134,6 @@ export const UsersUpdateSchema = BaseSchema.extend({
           "hover",
           "off",
         ]),
-        [UserPreference.BilingualGrammarChecking]: z.boolean(),
-        [UserPreference.BilingualGrammarLevel]: z.enum(["default", "picky"]),
-        [UserPreference.BilingualGrammarIgnoredRules]: z.array(
-          z.string().max(200)
-        ),
         [UserPreference.BilingualAutoTranslate]: z.boolean(),
       })
       .partial()

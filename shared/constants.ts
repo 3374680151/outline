@@ -108,9 +108,6 @@ export const TeamPreferenceDefaults: TeamPreferences = {
   [TeamPreference.DisabledEmbeds]: [],
   [TeamPreference.PersonalDocs]: true,
   [TeamPreference.BilingualEditor]: true,
-  [TeamPreference.GrammarChecking]: true,
-  [TeamPreference.GrammarLevel]: "default" as const,
-  [TeamPreference.GrammarDisabledRules]: "",
   [TeamPreference.TranslationTrigger]: "dot" as const,
 };
 
@@ -127,11 +124,8 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.EnableSmartText]: true,
   [UserPreference.NotificationBadge]: NotificationBadgeType.Count,
   // Editing assists stay off until the user turns them on from the document
-  // header toggles (grammar checking mirrors this); the design doc's
-  // "默认开启" note for selection translate predates that decision.
+  // header toggles; the design doc's "默认开启" note for selection translate
+  // predates that decision.
   [UserPreference.BilingualTranslationTrigger]: "off" as const,
-  [UserPreference.BilingualGrammarChecking]: false,
-  [UserPreference.BilingualGrammarLevel]: "default" as const,
-  [UserPreference.BilingualGrammarIgnoredRules]: [],
   [UserPreference.BilingualAutoTranslate]: true,
 };

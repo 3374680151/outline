@@ -6,10 +6,8 @@ import { useTranslation } from "react-i18next";
 import type { WordLookupDTO } from "@shared/types/bilingual";
 import BilingualStore from "~/stores/BilingualStore";
 import history from "~/utils/history";
-import { openGrammarPanel } from "~/utils/bilingual/grammarUi";
 import { settingsPath } from "~/utils/routeHelpers";
 import {
-  grammarLevel,
   translationTargetLang,
   setTranslationTargetLang,
   TRANSLATION_TARGET_LANGS,
@@ -69,7 +67,7 @@ export interface TranslatePopoverProps {
   blockIndex: number;
   /** The document the text belongs to. */
   documentId: string;
-  /** The sentence containing a word lookup, for the grammar section. */
+  /** The sentence containing a word lookup, as the dictionary context. */
   sentence?: string;
   /** Viewport anchor rect to place the popover against. */
   anchor: { left: number; right: number; top: number; bottom: number };
@@ -116,7 +114,6 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [to, setTo] = React.useState<string>(() => translationTargetLang());
   const [copied, setCopied] = React.useState(false);
   const [reloadToken, setReloadToken] = React.useState(0);
-  const [grammarIssueCount, setGrammarIssueCount] = React.useState(0);
   const [dictEntry, setDictEntry] = React.useState<WordLookupDTO | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState({
@@ -197,39 +194,6 @@ export const TranslatePopover = observer(function TranslatePopover(
   }, [text, providerId, to, t, reloadToken]);
 
   React.useEffect(() => {
-    // The card shows a one-line count of the sentence's grammar issues and
-    // links to the issue panel — fixing stays in one place, the panel.
-    const checkText = isWord ? sentence : text;
-
-    if (!checkText) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void BilingualStore.grammarCheck({
-      text: checkText,
-      language: "en-US",
-      level: grammarLevel(),
-      mode: "all",
-    })
-      .then((result) => {
-        if (cancelled || !result.available || !Array.isArray(result.matches)) {
-          return;
-        }
-
-        setGrammarIssueCount(result.matches.length);
-      })
-      .catch(() => {
-        // Grammar sidecar unavailable – the card still shows the translation.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isWord, sentence, text]);
-
-  React.useEffect(() => {
     // Word lookups also try the AI dictionary card (phonetics, senses,
     // examples) when an AI provider is configured server-side.
     if (!isWord || !sentence) {
@@ -255,8 +219,8 @@ export const TranslatePopover = observer(function TranslatePopover(
 
   React.useEffect(() => {
     // Measure after first paint so the clamp uses the real size, and keep
-    // re-measuring while the card grows (dictionary and grammar sections are
-    // appended after the translation arrives).
+    // re-measuring while the card grows (the dictionary section is appended
+    // after the translation arrives).
     const measure = () => {
       const rect = containerRef.current?.getBoundingClientRect();
       const size = {
@@ -294,7 +258,6 @@ export const TranslatePopover = observer(function TranslatePopover(
     result,
     noProvider,
     dictEntry,
-    grammarIssueCount,
   ]);
 
   React.useEffect(() => {
@@ -458,24 +421,6 @@ export const TranslatePopover = observer(function TranslatePopover(
           </DictNote>
         </DictSection>
       )}
-      {grammarIssueCount > 0 && (
-        <GrammarHint>
-          <span>
-            ⚠{" "}
-            {t("{{count}} grammar issues in this sentence", {
-              count: grammarIssueCount,
-            })}
-          </span>
-          <HintLink
-            onClick={() => {
-              onClose();
-              openGrammarPanel();
-            }}
-          >
-            {t("Fix in the grammar panel")}
-          </HintLink>
-        </GrammarHint>
-      )}
       <Actions>
         <ActionButton onClick={handleCopy} disabled={!result}>
           {copied ? t("Copied") : t("Copy")}
@@ -636,31 +581,6 @@ const Muted = styled.span`
 const DictNote = styled.div`
   font-size: 10.5px;
   color: ${s("textTertiary")};
-`;
-
-const GrammarHint = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: ${s("noticeWarningBackground")};
-  color: ${s("noticeWarningText")};
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 12px;
-  margin-bottom: 10px;
-`;
-
-const HintLink = styled.button`
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: ${s("noticeWarningText")};
-  font-weight: 500;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 0;
-  flex: none;
 `;
 
 const Actions = styled.div`

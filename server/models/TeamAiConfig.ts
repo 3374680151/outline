@@ -12,9 +12,9 @@ import Model from "./base/Model";
 
 /**
  * Workspace level AI service configuration, e.g. the OpenAI-compatible
- * endpoint used for translation or the LanguageTool server used for grammar
- * checking. Credentials are encrypted at rest and never leave the server;
- * only workspace admins may read or write this configuration.
+ * endpoint used for translation. Credentials are encrypted at rest and never
+ * leave the server; only workspace admins may read or write this
+ * configuration.
  */
 @Table({ tableName: "team_ai_configs", modelName: "team_ai_config" })
 class TeamAiConfig extends Model<

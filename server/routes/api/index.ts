@@ -29,7 +29,6 @@ import documents from "./documents";
 import emojis from "./emojis";
 import events from "./events";
 import fileOperationsRoute from "./fileOperations";
-import grammar from "./grammar/grammar";
 import groupMemberships from "./groupMemberships";
 import groups from "./groups";
 import imports from "./imports";
@@ -129,7 +128,6 @@ router.use("/", reactions.routes());
 router.use("/", relationships.routes());
 router.use("/", bilingual.routes());
 router.use("/", aiConfig.routes());
-router.use("/", grammar.routes());
 router.use("/", translations.routes());
 router.use("/", imports.routes());
 

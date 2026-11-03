@@ -43,9 +43,7 @@ import DocumentTitle from "./DocumentTitle";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
 import BilingualMirrorExtension from "~/editor/extensions/BilingualMirror";
 import HoverTranslateExtension from "~/editor/extensions/HoverTranslate";
-import GrammarCheckExtension from "~/editor/extensions/GrammarCheck";
 import { useBilingualPair } from "~/components/BilingualPairProvider";
-import { TeamPreference } from "@shared/types";
 import { first } from "es-toolkit/compat";
 import useShare from "@shared/hooks/useShare";
 import CodeWordBreak from "@shared/editor/extensions/CodeWordBreak";
@@ -231,7 +229,6 @@ function DocumentEditor(props: Props) {
     active: bilingualActive,
     engine: bilingualEngineFromContext,
     sideOf: bilingualSideOf,
-    registerGrammarExtension,
   } = useBilingualPair();
   const bilingualSide = bilingualSideOf(document.id);
   const bilingualEngine = bilingualActive ? bilingualEngineFromContext : null;
@@ -245,21 +242,8 @@ function DocumentEditor(props: Props) {
   }>({ side: bilingualSide, engine: bilingualEngine });
   bilingualStateRef.current = { side: bilingualSide, engine: bilingualEngine };
 
-  const grammarExtensionRef = React.useRef<GrammarCheckExtension | null>(null);
-
-  const editorExtensions = React.useMemo(() => {
-    const grammarExtension = new GrammarCheckExtension({
-      language: "en-US",
-      gate: () =>
-        bilingualStateRef.current.side !== "target" &&
-        // The grammar service checks English prose; non-English documents
-        // would only produce noise, matching the preference's description.
-        (!document.language || /^en/i.test(document.language)) &&
-        (team?.getPreference(TeamPreference.GrammarChecking) ?? true),
-    });
-    grammarExtensionRef.current = grammarExtension;
-
-    return [
+  const editorExtensions = React.useMemo(
+    () => [
       ...extensions,
       new BilingualMirrorExtension({
         getState: () => bilingualStateRef.current,
@@ -269,22 +253,10 @@ function DocumentEditor(props: Props) {
         onInsertText: (blockIndex: number, text: string) =>
           bilingualStateRef.current.engine?.forceWrite(blockIndex, text),
       }),
-      grammarExtension,
-    ];
+    ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  React.useEffect(() => {
-    const extension = grammarExtensionRef.current;
-
-    if (extension && bilingualActive && bilingualSide === "source") {
-      registerGrammarExtension(document.id, extension);
-    }
-
-    return () => {
-      registerGrammarExtension(document.id, null);
-    };
-  }, [bilingualActive, registerGrammarExtension, bilingualSide, document.id]);
+    []
+  );
 
   return (
     <Flex auto column>

@@ -33,10 +33,10 @@ type TestState =
   | { status: "failed"; error: string };
 
 /**
- * Workspace level configuration for the AI services backing translation and
- * grammar checking: the OpenAI-compatible endpoint, DeepL, and LanguageTool.
- * Credentials are stored encrypted server-side; only admins can read this
- * page and keys are never returned in full.
+ * Workspace level configuration for the AI services backing translation: the
+ * OpenAI-compatible endpoint, DeepL, and the free fallback. Credentials are
+ * stored encrypted server-side; only admins can read this page and keys are
+ * never returned in full.
  */
 export const AiServicesSection = observer(function AiServicesSection() {
   const { t } = useTranslation();
@@ -72,7 +72,7 @@ export const AiServicesSection = observer(function AiServicesSection() {
 
   return (
     <>
-      <Heading as="h2">{t("Translation & grammar services")}</Heading>
+      <Heading as="h2">{t("Translation services")}</Heading>
       <Text as="p" type="secondary">
         {t(
           "Configure the AI services used by the bilingual editor. Keys are encrypted at rest and never shown in full. Workspace configuration takes precedence over environment variables."
@@ -85,7 +85,7 @@ export const AiServicesSection = observer(function AiServicesSection() {
         description={t(
           "Allow the bilingual split view, document menu entry, and bilingual document list for everyone in the workspace."
         )}
-        border
+        border={false}
       >
         <Switch
           id={TeamPreference.BilingualEditor}
@@ -93,23 +93,6 @@ export const AiServicesSection = observer(function AiServicesSection() {
           checked={team.getPreference(TeamPreference.BilingualEditor)}
           onChange={(checked) =>
             void handleTeamPref(TeamPreference.BilingualEditor, checked)
-          }
-        />
-      </SettingRow>
-      <SettingRow
-        name={TeamPreference.GrammarChecking}
-        label={t("Grammar checking")}
-        description={t(
-          "Master switch for grammar checking across the workspace. Individual members can turn it off for themselves."
-        )}
-        border={false}
-      >
-        <Switch
-          id={TeamPreference.GrammarChecking}
-          name={TeamPreference.GrammarChecking}
-          checked={team.getPreference(TeamPreference.GrammarChecking)}
-          onChange={(checked) =>
-            void handleTeamPref(TeamPreference.GrammarChecking, checked)
           }
         />
       </SettingRow>
@@ -138,7 +121,6 @@ const ProviderCard = observer(function ProviderCard({
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
-  const isLanguageTool = provider.providerId === "languagetool";
   const isLanguageModel = provider.providerId === "openai-compatible";
   const configurable = provider.providerId !== "microsoft-free";
 
@@ -261,35 +243,29 @@ const ProviderCard = observer(function ProviderCard({
         </Badges>
       </CardHeader>
 
-      {(provider.baseUrl !== null || isLanguageTool || isLanguageModel) && (
+      {(provider.baseUrl !== null || isLanguageModel) && (
         <Field>
           <Label>{t("API endpoint")}</Label>
           <Input
             value={baseUrl}
-            placeholder={
-              isLanguageTool
-                ? "http://languagetool:8081"
-                : "https://api.example.com/v1"
-            }
+            placeholder="https://api.example.com/v1"
             onChange={(event) => setBaseUrl(event.currentTarget.value)}
           />
         </Field>
       )}
 
-      {!isLanguageTool && (
-        <Field>
-          <Label>{t("API key")}</Label>
-          <Input
-            type="password"
-            value={apiKey}
-            placeholder={
-              provider.keyHint ? `•••• ${provider.keyHint}` : t("Not set")
-            }
-            onChange={(event) => setApiKey(event.currentTarget.value)}
-            autoComplete="new-password"
-          />
-        </Field>
-      )}
+      <Field>
+        <Label>{t("API key")}</Label>
+        <Input
+          type="password"
+          value={apiKey}
+          placeholder={
+            provider.keyHint ? `•••• ${provider.keyHint}` : t("Not set")
+          }
+          onChange={(event) => setApiKey(event.currentTarget.value)}
+          autoComplete="new-password"
+        />
+      </Field>
 
       {isLanguageModel && (
         <Field>
@@ -332,7 +308,7 @@ const ProviderCard = observer(function ProviderCard({
         >
           {test.status === "running" ? t("Testing…") : t("Test connection")}
         </Button>
-        {!provider.isDefault && !isLanguageTool && (
+        {!provider.isDefault && (
           <Button neutral onClick={handleSetDefault}>
             {t("Set as default")}
           </Button>

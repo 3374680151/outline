@@ -71,32 +71,6 @@ export interface BilingualUpdateStatePayload {
   blockStates: BilingualBlockState[];
 }
 
-/** One grammar issue returned by the grammar check proxy (LanguageTool). */
-export interface GrammarMatchDTO {
-  /** Human readable explanation of the issue. */
-  message: string;
-  /** Short category label, when the rule provides one. */
-  shortMessage?: string;
-  /** Suggested replacements. */
-  replacements: { value: string }[];
-  /** UTF-16 code unit offset of the issue into the checked text. */
-  offset: number;
-  /** UTF-16 code unit length of the issue. */
-  length: number;
-  /** Text around the issue with the issue position inside it. */
-  context: { text: string; offset: number; length: number };
-  /** The full sentence containing the issue. */
-  sentence?: string;
-  /** Rule metadata. */
-  rule: {
-    id: string;
-    description?: string;
-    issueType?: string;
-    category: { id: string; name: string };
-    isPremium?: boolean;
-  };
-}
-
 /** AI dictionary entry for a word lookup (FluentRead-compatible protocol). */
 export interface WordLookupDTO {
   /** Where the entry came from, surfaced as a trust label in the UI. */

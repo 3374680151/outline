@@ -5,7 +5,6 @@ import { BaseSchema } from "@server/routes/api/schema";
 export const AI_CONFIG_PROVIDER_IDS = [
   "openai-compatible",
   "deepl",
-  "languagetool",
 ] as const;
 
 const providerIdSchema = z.enum(AI_CONFIG_PROVIDER_IDS);

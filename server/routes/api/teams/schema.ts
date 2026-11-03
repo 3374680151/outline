@@ -82,12 +82,6 @@ export const TeamsUpdateSchema = BaseSchema.extend({
         [TeamPreference.PersonalDocs]: z.boolean(),
         /** Whether the bilingual editor module is enabled for the workspace. */
         [TeamPreference.BilingualEditor]: z.boolean(),
-        /** Whether grammar checking is enabled for the workspace. */
-        [TeamPreference.GrammarChecking]: z.boolean(),
-        /** Default LanguageTool level used when grammar checking. */
-        [TeamPreference.GrammarLevel]: z.enum(["default", "picky"]),
-        /** Comma separated LanguageTool rule ids the workspace chose to ignore. */
-        [TeamPreference.GrammarDisabledRules]: z.string().max(2000),
         /** When the translation dot should appear while editing. */
         [TeamPreference.TranslationTrigger]: z.enum(["dot", "hover", "off"]),
       })

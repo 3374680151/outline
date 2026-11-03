@@ -25,26 +25,6 @@ export interface TranslationProviderInfo {
   isDefault?: boolean;
 }
 
-/** One block of a batch grammar check request. */
-export type GrammarCheckItem = {
-  /** Client provided identifier echoed back with the result. */
-  id: string;
-  /** The plain text to check. */
-  text: string;
-};
-
-/** One entry of a batch grammar check response. */
-export type GrammarCheckResult = {
-  /** The client provided id of the item. */
-  id: string;
-  /** Whether the grammar service processed the item. */
-  available: boolean;
-  /** Why the item was not processed. */
-  reason?: string;
-  /** The raw grammar matches for the text. */
-  matches?: unknown[];
-};
-
 /** A policy payload attached to an API response. */
 type ResponsePolicy = { id: string; abilities: Record<string, boolean> };
 
@@ -339,44 +319,6 @@ class BilingualStore {
       this.providers = res.data.providers;
     });
     return this.providers;
-  };
-
-  /**
-   * Runs a grammar check via the server proxy.
-   *
-   * @param params The check parameters.
-   * @returns The check result payload.
-   */
-  grammarCheck = async (params: {
-    text: string;
-    language: string;
-    level: string;
-    mode?: string;
-    disabledRules?: string;
-  }): Promise<{
-    available: boolean;
-    reason?: string;
-    matches?: unknown[];
-  }> => {
-    const res = await client.post("/grammar.check", params);
-    return res.data;
-  };
-
-  /**
-   * Runs a batched grammar check: many blocks in one HTTP round trip.
-   *
-   * @param params The shared check parameters and the blocks to check.
-   * @returns One result per item, in input order.
-   */
-  grammarCheckBatch = async (params: {
-    items: GrammarCheckItem[];
-    language: string;
-    level: string;
-    mode?: string;
-    disabledRules?: string;
-  }): Promise<GrammarCheckResult[]> => {
-    const res = await client.post("/grammar.checkBatch", params);
-    return res.data.results as GrammarCheckResult[];
   };
 
   /**

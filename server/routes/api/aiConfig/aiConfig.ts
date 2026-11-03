@@ -11,7 +11,6 @@ import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import env from "@server/env";
 import fetch from "@server/utils/fetch";
 import { decryptSecret, encryptSecret } from "@server/utils/crypto";
-import languageToolClient from "@server/utils/LanguageToolClient";
 import { loadTeamTranslationConfig } from "@server/services/translation/teamConfig";
 import * as T from "./schema";
 
@@ -21,11 +20,10 @@ const router = new Router();
 const PROVIDER_LABELS: Record<string, string> = {
   "openai-compatible": "OpenAI Compatible",
   deepl: "DeepL",
-  languagetool: "LanguageTool",
 };
 
 /** Whitelisted provider ids for configuration, in display order. */
-const CONFIGURABLE = ["openai-compatible", "deepl", "languagetool"] as const;
+const CONFIGURABLE = ["openai-compatible", "deepl"] as const;
 
 /** The tail of an API key that is safe to show as a reminder. */
 function keyHint(apiKeyEncrypted: string | null): string | undefined {
@@ -102,7 +100,6 @@ router.post(
         fromEnvironment: {
           "openai-compatible": !!env.OPENAI_BASE_URL && !!env.OPENAI_API_KEY,
           deepl: !!env.DEEPL_API_KEY,
-          languagetool: !!env.LANGUAGETOOL_URL,
         }[providerId],
       };
     });
@@ -110,11 +107,6 @@ router.post(
     ctx.body = {
       data: {
         providers,
-        languageTool: {
-          configured: languageToolClient.isConfiguredFor(
-            rows.get("languagetool")?.baseUrl ?? null
-          ),
-        },
       },
     };
   }
@@ -243,34 +235,6 @@ async function runConnectionTest(
         headers: {
           Authorization: `DeepL-Auth-Key ${credentials.apiKey}`,
         },
-      });
-
-      if (!response.ok) {
-        return {
-          ok: false,
-          latencyMs: Date.now() - started,
-          error: `HTTP ${response.status}`,
-        };
-      }
-    } else if (providerId === "languagetool") {
-      const baseUrl = credentials.baseUrl || env.LANGUAGETOOL_URL;
-
-      if (!baseUrl) {
-        return { ok: false, latencyMs: 0, error: "not-configured" };
-      }
-
-      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v2/check`, {
-        method: "POST",
-        timeout: 30000,
-        allowPrivateIPAddress: true,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          text: "Hello world.",
-          language: "en-US",
-        }).toString(),
       });
 
       if (!response.ok) {

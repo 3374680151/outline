@@ -6,6 +6,7 @@ import BilingualStore from "~/stores/BilingualStore";
 import { MIRROR_WRITE_META } from "~/utils/bilingual/editorBlocks";
 import { registerMirrorFlashListener } from "~/utils/bilingual/mirrorFlash";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
+import { ensureBilingualStyles } from "~/utils/bilingual/styles";
 import { observeBlockVisibility } from "~/utils/bilingual/visibility";
 
 /** How long the freshly written mirror block stays highlighted. */
@@ -57,6 +58,10 @@ export default class BilingualMirrorExtension extends Extension<BilingualMirrorO
   }
 
   get plugins() {
+    // The flash decoration renders through a class styled by a plain style
+    // element, which must exist in the document head before it is used.
+    ensureBilingualStyles();
+
     const getState = this.options.getState;
 
     return [

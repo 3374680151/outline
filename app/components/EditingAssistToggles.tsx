@@ -1,36 +1,28 @@
 import { observer } from "mobx-react";
-import { CaseSensitiveIcon, GlobeIcon } from "outline-icons";
+import { GlobeIcon } from "outline-icons";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Action } from "~/components/Actions";
 import Button from "~/components/Button";
 import Tooltip from "~/components/Tooltip";
 import {
-  grammarCheckingEnabled,
-  setGrammarCheckingEnabled,
   setTranslationTrigger,
   translationTrigger,
 } from "~/utils/bilingual/prefs";
 
 /**
- * A pair of compact header toggle buttons for the user-level editing
- * assists: grammar checking underlines and the selection translation
- * trigger. Both states persist as server-side user preferences, so they
- * sync across devices; the editor extensions read the same preferences
- * live and apply changes without remounting.
+ * A compact header toggle button for the user-level editing assist:
+ * the selection translation trigger. The state persists as a server-side
+ * user preference, so it syncs across devices; the editor extension reads
+ * the same preference live and applies changes without remounting.
  *
- * @returns The editing assist toggle buttons for the document header.
+ * @returns The editing assist toggle button for the document header.
  */
 export const EditingAssistToggles = observer(
   function EditingAssistToggles() {
     const { t } = useTranslation();
-    const grammarOn = grammarCheckingEnabled();
     const trigger = translationTrigger();
     const translateOn = trigger !== "off";
-
-    const handleGrammarToggle = () => {
-      setGrammarCheckingEnabled(!grammarOn);
-    };
 
     const handleTranslateToggle = () => {
       // The button is a quick on/off switch: an active trigger returns to
@@ -48,24 +40,6 @@ export const EditingAssistToggles = observer(
 
     return (
       <>
-        <Action>
-          <Tooltip
-            content={`${t("Grammar checking")}: ${
-              grammarOn ? t("On") : t("Off")
-            }`}
-            side="bottom"
-          >
-            <AssistButton
-              $on={grammarOn}
-              aria-pressed={grammarOn}
-              aria-label={t("Grammar checking")}
-              onClick={handleGrammarToggle}
-              icon={<CaseSensitiveIcon />}
-              borderOnHover
-              neutral
-            />
-          </Tooltip>
-        </Action>
         <Action>
           <Tooltip
             content={`${t("Word translation")}: ${triggerLabel}`}

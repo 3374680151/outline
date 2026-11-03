@@ -914,26 +914,6 @@ export class Environment {
     this.toOptionalNumber(environment.POPULARITY_UPDATE_INTERVAL_HOURS) ?? 12;
 
   /**
-   * The URL of the LanguageTool server used for grammar checking, e.g.
-   * http://languagetool:8081. When empty grammar checking is disabled.
-   */
-  @IsOptional()
-  @IsUrl({
-    protocols: ["http", "https"],
-    require_protocol: true,
-    require_tld: false,
-  })
-  public LANGUAGETOOL_URL = this.toOptionalString(environment.LANGUAGETOOL_URL);
-
-  /**
-   * Timeout in milliseconds for requests to the LanguageTool server.
-   */
-  @IsOptional()
-  @IsNumber()
-  public LANGUAGETOOL_TIMEOUT_MS =
-    this.toOptionalNumber(environment.LANGUAGETOOL_TIMEOUT_MS) ?? 8000;
-
-  /**
    * Comma separated order of translation providers to try, e.g.
    * "openai-compatible,deepl,microsoft-free". Providers lacking credentials
    * are skipped at runtime.
@@ -982,17 +962,6 @@ export class Environment {
   public BILINGUAL_EDITOR_ENABLED =
     environment.BILINGUAL_EDITOR_ENABLED !== undefined
       ? this.toBoolean(environment.BILINGUAL_EDITOR_ENABLED)
-      : true;
-
-  /**
-   * Whether grammar checking is enabled for this installation. Requires
-   * LANGUAGETOOL_URL to be configured.
-   */
-  @IsOptional()
-  @IsBoolean()
-  public GRAMMAR_CHECKING_ENABLED =
-    environment.GRAMMAR_CHECKING_ENABLED !== undefined
-      ? this.toBoolean(environment.GRAMMAR_CHECKING_ENABLED)
       : true;
 
   /**

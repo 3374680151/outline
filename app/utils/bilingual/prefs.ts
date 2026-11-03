@@ -43,9 +43,6 @@ function scheduleUserSave(): void {
  */
 
 const LEGACY_TRIGGER_KEY = "bilingual-translation-trigger";
-const LEGACY_GRAMMAR_ENABLED_KEY = "bilingual-grammar-enabled";
-const LEGACY_GRAMMAR_LEVEL_KEY = "bilingual-grammar-level";
-const LEGACY_IGNORED_RULES_KEY = "bilingual-grammar-ignored-rules";
 const MIGRATION_DONE_KEY = "bilingual-prefs-migrated";
 
 /** Valid translation trigger modes. */
@@ -82,42 +79,9 @@ export function migrateLegacyPreferences(): void {
     user.setPreference(UserPreference.BilingualTranslationTrigger, trigger);
   }
 
-  const grammar = localStorage.getItem(LEGACY_GRAMMAR_ENABLED_KEY);
-
-  if (grammar === "off") {
-    user.setPreference(UserPreference.BilingualGrammarChecking, false);
-  }
-
-  const level = localStorage.getItem(LEGACY_GRAMMAR_LEVEL_KEY);
-
-  if (level === "picky" || level === "default") {
-    user.setPreference(UserPreference.BilingualGrammarLevel, level);
-  }
-
-  try {
-    const raw = localStorage.getItem(LEGACY_IGNORED_RULES_KEY);
-    const rules = raw ? (JSON.parse(raw) as unknown) : null;
-
-    if (Array.isArray(rules) && rules.length > 0) {
-      user.setPreference(
-        UserPreference.BilingualGrammarIgnoredRules,
-        rules.filter((rule): rule is string => typeof rule === "string")
-      );
-    }
-  } catch (_err) {
-    // Malformed legacy value; ignore it.
-  }
-
   void user.save();
 
-  for (const key of [
-    LEGACY_TRIGGER_KEY,
-    LEGACY_GRAMMAR_ENABLED_KEY,
-    LEGACY_GRAMMAR_LEVEL_KEY,
-    LEGACY_IGNORED_RULES_KEY,
-  ]) {
-    localStorage.removeItem(key);
-  }
+  localStorage.removeItem(LEGACY_TRIGGER_KEY);
 }
 
 /**
@@ -142,79 +106,6 @@ export function setTranslationTrigger(mode: TranslationTriggerMode): void {
   user?.setPreference(UserPreference.BilingualTranslationTrigger, mode);
   bumpPrefsVersion();
   scheduleUserSave();
-}
-
-/**
- * Whether grammar checking is enabled for this user.
- *
- * @returns True when the user explicitly turned it on, false by default.
- */
-export function grammarCheckingEnabled(): boolean {
-  return (
-    currentUser()?.getPreference(UserPreference.BilingualGrammarChecking) ??
-    false
-  );
-}
-
-/**
- * Persists the grammar checking toggle.
- *
- * @param enabled Whether checking should be enabled.
- */
-export function setGrammarCheckingEnabled(enabled: boolean): void {
-  const user = currentUser();
-  user?.setPreference(UserPreference.BilingualGrammarChecking, enabled);
-  bumpPrefsVersion();
-  scheduleUserSave();
-}
-
-/**
- * Reads the grammar rule level.
- *
- * @returns "default" or "picky", defaulting to "default".
- */
-export function grammarLevel(): "default" | "picky" {
-  return (currentUser()?.getPreference(UserPreference.BilingualGrammarLevel) ??
-    "default") as "default" | "picky";
-}
-
-/**
- * Persists the grammar rule level.
- *
- * @param level The level to store.
- */
-export function setGrammarLevel(level: "default" | "picky"): void {
-  const user = currentUser();
-  user?.setPreference(UserPreference.BilingualGrammarLevel, level);
-  bumpPrefsVersion();
-  scheduleUserSave();
-}
-
-/**
- * The rule ids the user has chosen to ignore.
- *
- * @returns The ignored rule ids.
- */
-export function grammarIgnoredRules(): string[] {
-  return (
-    currentUser()?.getPreference(UserPreference.BilingualGrammarIgnoredRules) ??
-    []
-  );
-}
-
-/**
- * Persists an ignored rule id.
- *
- * @param ruleId The rule id to ignore.
- * @returns The updated ignored rule ids.
- */
-export function addGrammarIgnoredRule(ruleId: string): string[] {
-  const rules = [...new Set([...grammarIgnoredRules(), ruleId])];
-  const user = currentUser();
-  user?.setPreference(UserPreference.BilingualGrammarIgnoredRules, rules);
-  bumpPrefsVersion();
-  scheduleUserSave();
-  return rules;
 }
 
 /**
