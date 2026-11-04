@@ -17,6 +17,7 @@ import CopyToClipboard from "~/components/CopyToClipboard";
 import NudeButton from "~/components/NudeButton";
 import { useTheme } from "styled-components";
 import { AiServicesSection } from "./components/AiServicesSection";
+import ModelProvidersSection from "./components/ModelProvidersSection";
 
 function AI() {
   const { t } = useTranslation();
@@ -26,6 +27,15 @@ function AI() {
   const handleMCPChange = React.useCallback(
     async (checked: boolean) => {
       team.setPreference(TeamPreference.MCP, checked);
+      await team.save();
+      toast.success(t("Settings saved"));
+    },
+    [team, t]
+  );
+
+  const handleBilingualEditorChange = React.useCallback(
+    async (checked: boolean) => {
+      team.setPreference(TeamPreference.BilingualEditor, checked);
       await team.save();
       toast.success(t("Settings saved"));
     },
@@ -141,6 +151,24 @@ function AI() {
           }
         />
       )}
+
+      <Heading as="h2">{t("Bilingual editing")}</Heading>
+      <SettingRow
+        name={TeamPreference.BilingualEditor}
+        label={t("Bilingual editor")}
+        description={t(
+          "Allow the bilingual split view, document menu entry, and bilingual document list for everyone in the workspace."
+        )}
+      >
+        <Switch
+          id={TeamPreference.BilingualEditor}
+          name={TeamPreference.BilingualEditor}
+          checked={team.getPreference(TeamPreference.BilingualEditor)}
+          onChange={handleBilingualEditorChange}
+        />
+      </SettingRow>
+
+      <ModelProvidersSection />
 
       <AiServicesSection />
 

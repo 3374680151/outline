@@ -34,6 +34,8 @@ function SettingsRoutes() {
       />
       {/* Features was renamed to AI, redirect for backwards compatibility */}
       <Redirect exact from={settingsPath("features")} to={settingsPath("ai")} />
+      {/* Models was merged into the AI page, redirect for backwards compatibility */}
+      <Redirect exact from={settingsPath("models")} to={settingsPath("ai")} />
       <Route
         exact
         path={settingsPath("groups", ":id", "members")}

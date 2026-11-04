@@ -42,8 +42,11 @@ function scheduleUserSave(): void {
  * values from earlier builds are migrated once and then removed.
  */
 
-const LEGACY_TRIGGER_KEY = "bilingual-translation-trigger";
-const MIGRATION_DONE_KEY = "bilingual-prefs-migrated";
+/** One-time migration of pre-preference localStorage values into the user's
+ * server-side preferences; the sentinel keeps it at most once per profile. */
+const MIGRATION_DONE_KEY = "bilingual-prefs-migrated-v2";
+const LEGACY_TARGET_LANG_KEY = "bilingual-translation-target-lang";
+const LEGACY_PROVIDER_KEY = "bilingual-translation-provider";
 
 /** Valid translation trigger modes. */
 export type TranslationTriggerMode = "off" | "dot" | "hover";
@@ -73,15 +76,22 @@ export function migrateLegacyPreferences(): void {
     return;
   }
 
-  const trigger = localStorage.getItem(LEGACY_TRIGGER_KEY);
+  const targetLang = localStorage.getItem(LEGACY_TARGET_LANG_KEY);
 
-  if (trigger === "off" || trigger === "dot" || trigger === "hover") {
-    user.setPreference(UserPreference.BilingualTranslationTrigger, trigger);
+  if (targetLang) {
+    user.setPreference(UserPreference.BilingualTargetLang, targetLang);
+  }
+
+  const provider = localStorage.getItem(LEGACY_PROVIDER_KEY);
+
+  if (provider) {
+    user.setPreference(UserPreference.BilingualTranslationProvider, provider);
   }
 
   void user.save();
 
-  localStorage.removeItem(LEGACY_TRIGGER_KEY);
+  localStorage.removeItem(LEGACY_TARGET_LANG_KEY);
+  localStorage.removeItem(LEGACY_PROVIDER_KEY);
 }
 
 /**
@@ -154,9 +164,6 @@ export function setProofreadingEnabled(enabled: boolean): void {
   scheduleUserSave();
 }
 
-const TRANSLATION_TARGET_LANG_KEY = "bilingual-translation-target-lang";
-const TRANSLATION_PROVIDER_KEY = "bilingual-translation-provider";
-
 /** Common target languages offered in the translate card. */
 export const TRANSLATION_TARGET_LANGS: ReadonlyArray<{
   code: string;
@@ -177,7 +184,9 @@ export const TRANSLATION_TARGET_LANGS: ReadonlyArray<{
  * @returns The target language code, "zh" by default.
  */
 export function translationTargetLang(): string {
-  return localStorage.getItem(TRANSLATION_TARGET_LANG_KEY) || "zh";
+  return (
+    currentUser()?.getPreference(UserPreference.BilingualTargetLang) ?? "zh"
+  );
 }
 
 /**
@@ -186,7 +195,10 @@ export function translationTargetLang(): string {
  * @param lang The target language code.
  */
 export function setTranslationTargetLang(lang: string): void {
-  localStorage.setItem(TRANSLATION_TARGET_LANG_KEY, lang);
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualTargetLang, lang);
+  bumpPrefsVersion();
+  scheduleUserSave();
 }
 
 /**
@@ -195,7 +207,10 @@ export function setTranslationTargetLang(lang: string): void {
  * @returns The provider id, or "" for the automatic fallback chain.
  */
 export function translationProviderId(): string {
-  return localStorage.getItem(TRANSLATION_PROVIDER_KEY) ?? "";
+  return (
+    currentUser()?.getPreference(UserPreference.BilingualTranslationProvider) ??
+    ""
+  );
 }
 
 /**
@@ -204,5 +219,8 @@ export function translationProviderId(): string {
  * @param providerId The provider id, or "" for automatic.
  */
 export function setTranslationProviderId(providerId: string): void {
-  localStorage.setItem(TRANSLATION_PROVIDER_KEY, providerId);
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualTranslationProvider, providerId);
+  bumpPrefsVersion();
+  scheduleUserSave();
 }

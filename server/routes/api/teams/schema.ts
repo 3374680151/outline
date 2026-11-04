@@ -82,8 +82,6 @@ export const TeamsUpdateSchema = BaseSchema.extend({
         [TeamPreference.PersonalDocs]: z.boolean(),
         /** Whether the bilingual editor module is enabled for the workspace. */
         [TeamPreference.BilingualEditor]: z.boolean(),
-        /** When the translation dot should appear while editing. */
-        [TeamPreference.TranslationTrigger]: z.enum(["dot", "hover", "off"]),
         /** The model provider used for LLM translation; empty means automatic. */
         [TeamPreference.TranslationModel]: z.string().max(300),
         /** The model provider used for LLM proofreading; empty means automatic. */

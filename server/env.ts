@@ -954,17 +954,6 @@ export class Environment {
   public DEEPL_API_KEY = this.toOptionalString(environment.DEEPL_API_KEY);
 
   /**
-   * Whether the bilingual editor module is enabled for this installation.
-   * Can additionally be toggled per workspace via team preferences.
-   */
-  @IsOptional()
-  @IsBoolean()
-  public BILINGUAL_EDITOR_ENABLED =
-    environment.BILINGUAL_EDITOR_ENABLED !== undefined
-      ? this.toBoolean(environment.BILINGUAL_EDITOR_ENABLED)
-      : true;
-
-  /**
    * Returns true if the current installation is the cloud hosted version at
    * getoutline.com
    */

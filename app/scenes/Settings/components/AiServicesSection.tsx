@@ -79,24 +79,6 @@ export const AiServicesSection = observer(function AiServicesSection() {
         )}
       </Text>
 
-      <SettingRow
-        name={TeamPreference.BilingualEditor}
-        label={t("Bilingual editor")}
-        description={t(
-          "Allow the bilingual split view, document menu entry, and bilingual document list for everyone in the workspace."
-        )}
-        border={false}
-      >
-        <Switch
-          id={TeamPreference.BilingualEditor}
-          name={TeamPreference.BilingualEditor}
-          checked={team.getPreference(TeamPreference.BilingualEditor)}
-          onChange={(checked) =>
-            void handleTeamPref(TeamPreference.BilingualEditor, checked)
-          }
-        />
-      </SettingRow>
-
       {!providers ? null : (
         <Cards>
           {providers.map((provider) => (

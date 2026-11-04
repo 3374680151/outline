@@ -1,5 +1,4 @@
 import { observer } from "mobx-react";
-import { DatabaseIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -7,29 +6,26 @@ import styled from "styled-components";
 import { s } from "@shared/styles";
 import { TeamPreference } from "@shared/types";
 import { modelBinding } from "@shared/utils/aiModelBinding";
-import Heading from "~/components/Heading";
-import Scene from "~/components/Scene";
 import Text from "~/components/Text";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
 import { client } from "~/utils/ApiClient";
-import {
-  ModelSyncDialog,
-} from "./components/ModelConfig/ModelSyncDialog";
-import { ProviderConfigModal } from "./components/ModelConfig/ProviderConfigModal";
-import { ProviderDetailPane } from "./components/ModelConfig/ProviderDetailPane";
-import { ProviderListPane } from "./components/ModelConfig/ProviderListPane";
+import SettingRow from "./SettingRow";
+import { ModelSyncDialog } from "./ModelConfig/ModelSyncDialog";
+import { ProviderConfigModal } from "./ModelConfig/ProviderConfigModal";
+import { ProviderDetailPane } from "./ModelConfig/ProviderDetailPane";
+import { ProviderListPane } from "./ModelConfig/ProviderListPane";
 import {
   type ModelProviderInfo,
   usableModelOf,
-} from "./components/ModelConfig/types";
+} from "./ModelConfig/types";
 
 /**
- * The dedicated model configuration page, ported from the FluentRead-Go
- * models view: a summary line, a grouped provider list on the left, and the
- * provider detail on the right with model checklists, upstream sync, and
- * per-feature binding.
+ * The model gateway section of the AI services settings page: per-feature
+ * bindings (translation / proofreading), a grouped provider list on the
+ * left, and the provider detail on the right with model checklists,
+ * upstream sync, and connection tests.
  */
-function Models() {
+function ModelProvidersSection() {
   const { t } = useTranslation();
   const team = useCurrentTeam();
   const [providers, setProviders] = React.useState<ModelProviderInfo[] | null>(
@@ -250,15 +246,14 @@ function Models() {
     team.getPreference(TeamPreference.ProofreadModel) || ""
   );
 
-  const bindingLabel = (binding: string) => {
-    const row = providers?.find((entry) => binding === modelBinding(entry.id));
-
-    if (row) {
-      return row.model ? `${row.name} · ${row.model}` : row.name;
-    }
-
-    return t("Automatic (default route)");
-  };
+  const handleBindingChange = React.useCallback(
+    async (preference: TeamPreference, value: string) => {
+      team.setPreference(preference, value);
+      await team.save();
+      toast.success(t("Settings saved"));
+    },
+    [team, t]
+  );
 
   const usableModels = (providers ?? [])
     .filter((row) => row.enabled && row.hasApiKey)
@@ -266,13 +261,67 @@ function Models() {
   const pendingKeys = (providers ?? []).filter((row) => !row.hasApiKey).length;
 
   return (
-    <Scene title={t("Models")} icon={<DatabaseIcon />}>
-      <Heading>{t("Models")}</Heading>
-      <Text as="p" type="secondary">
-        {t(
-          "Configure the model providers used for translation and grammar checking. Keys are encrypted at rest and never shown in full."
+    <>
+      <SettingRow
+        name={TeamPreference.TranslationModel}
+        label={t("Translation binding")}
+        description={t(
+          "The model gateway used for bilingual translation when the request does not pick one. Leave automatic to try every configured provider in order."
         )}
-      </Text>
+      >
+        {providers === null ? null : (
+          <BindSelect
+            value={translationBinding}
+            aria-label={t("Translation binding")}
+            onChange={(event) =>
+              void handleBindingChange(
+                TeamPreference.TranslationModel,
+                event.target.value
+              )
+            }
+          >
+            <option value="">{t("Automatic (default route)")}</option>
+            {(providers ?? [])
+              .filter((row) => row.enabled)
+              .map((row) => (
+                <option key={row.id} value={modelBinding(row.id)}>
+                  {row.model ? `${row.name} · ${row.model}` : row.name}
+                </option>
+              ))}
+          </BindSelect>
+        )}
+      </SettingRow>
+
+      <SettingRow
+        name={TeamPreference.ProofreadModel}
+        label={t("Proofreading binding")}
+        description={t(
+          "The model gateway used by the LLM grammar check. Leave automatic to use the first configured gateway."
+        )}
+        border={false}
+      >
+        {providers === null ? null : (
+          <BindSelect
+            value={proofreadBinding}
+            aria-label={t("Proofreading binding")}
+            onChange={(event) =>
+              void handleBindingChange(
+                TeamPreference.ProofreadModel,
+                event.target.value
+              )
+            }
+          >
+            <option value="">{t("Automatic (default route)")}</option>
+            {(providers ?? [])
+              .filter((row) => row.enabled)
+              .map((row) => (
+                <option key={row.id} value={modelBinding(row.id)}>
+                  {row.model ? `${row.name} · ${row.model}` : row.name}
+                </option>
+              ))}
+          </BindSelect>
+        )}
+      </SettingRow>
 
       <StatRow>
         <Stats>
@@ -282,9 +331,6 @@ function Models() {
               {t("{{count}} usable models", { count: usableModels })}
               {pendingKeys > 0 &&
                 ` · ${t("{{count}} missing keys", { count: pendingKeys })}`}
-              {" · "}
-              {t("Translation")}: {bindingLabel(translationBinding)} ·{" "}
-              {t("Proofreading")}: {bindingLabel(proofreadBinding)}
             </>
           )}
         </Stats>
@@ -357,9 +403,28 @@ function Models() {
           onClose={() => setSyncTarget(null)}
         />
       )}
-    </Scene>
+
+      <Hint>
+        <Text type="secondary" as="p">
+          {t(
+            "Tip: configure a static provider below when you only have one OpenAI-compatible endpoint or a DeepL key — translation and grammar checking fall back to it automatically."
+          )}
+        </Text>
+      </Hint>
+    </>
   );
 }
+
+const BindSelect = styled.select`
+  min-width: 220px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 4px;
+  background: ${s("background")};
+  color: ${s("text")};
+  font-size: 14px;
+`;
 
 const StatRow = styled.div`
   display: flex;
@@ -389,4 +454,9 @@ const LoadingHint = styled.div`
   color: ${s("textTertiary")};
 `;
 
-export default observer(Models);
+const Hint = styled.div`
+  margin-top: 8px;
+  font-size: 13px;
+`;
+
+export default observer(ModelProvidersSection);

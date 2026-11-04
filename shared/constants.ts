@@ -108,7 +108,6 @@ export const TeamPreferenceDefaults: TeamPreferences = {
   [TeamPreference.DisabledEmbeds]: [],
   [TeamPreference.PersonalDocs]: true,
   [TeamPreference.BilingualEditor]: true,
-  [TeamPreference.TranslationTrigger]: "dot" as const,
   [TeamPreference.TranslationModel]: "",
   [TeamPreference.ProofreadModel]: "",
 };
@@ -131,4 +130,6 @@ export const UserPreferenceDefaults: UserPreferences = {
   [UserPreference.BilingualTranslationTrigger]: "off" as const,
   [UserPreference.BilingualAutoTranslate]: true,
   [UserPreference.BilingualProofreading]: false,
+  [UserPreference.BilingualTargetLang]: "zh",
+  [UserPreference.BilingualTranslationProvider]: "",
 };

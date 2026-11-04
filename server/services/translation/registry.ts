@@ -83,6 +83,21 @@ function candidates(
     .map((id) => STATIC_PROVIDERS[id])
     .filter((provider) => provider !== undefined);
 
+  // The workspace's chosen default static provider moves to the front of
+  // the static chain, behind the model gateways.
+  const defaultId = team?.defaultProviderId;
+
+  if (defaultId) {
+    const index = staticList.findIndex(
+      (provider) => provider.id === defaultId
+    );
+
+    if (index > 0) {
+      const [provider] = staticList.splice(index, 1);
+      staticList.unshift(provider);
+    }
+  }
+
   const configured = [...modelProviders(team), ...staticList].filter(
     (provider) => provider.isConfigured(team?.configs.get(provider.id))
   );

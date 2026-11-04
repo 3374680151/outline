@@ -1,6 +1,10 @@
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
-import { TeamModelProvider, TeamModelProviderModel } from "@server/models";
+import {
+  TeamAiConfig,
+  TeamModelProvider,
+  TeamModelProviderModel,
+} from "@server/models";
 import { decryptSecret } from "@server/utils/crypto";
 import {
   type ModelBinding,
@@ -155,6 +159,35 @@ export async function resolveChatChannel(
         apiKey,
         model: await resolveModel(row),
       };
+    }
+  }
+
+  // Fall back to the static provider credentials managed on the AI services
+  // settings page, so a workspace that only configured those still gets a
+  // chat channel instead of silently skipping to the environment.
+  const aiConfig = await TeamAiConfig.findOne({
+    where: {
+      teamId,
+      providerId: "openai-compatible",
+    },
+  });
+
+  if (aiConfig?.baseUrl && aiConfig.apiKeyEncrypted) {
+    try {
+      const apiKey = decryptSecret(aiConfig.apiKeyEncrypted);
+
+      if (apiKey) {
+        return {
+          providerId: null,
+          label: "OpenAI Compatible",
+          protocol: "openai",
+          baseUrl: aiConfig.baseUrl,
+          apiKey,
+          model: aiConfig.model ?? env.OPENAI_TRANSLATION_MODEL,
+        };
+      }
+    } catch (err) {
+      Logger.warn("Failed to decrypt the AI config channel", { err });
     }
   }
 

@@ -22,9 +22,6 @@ const POPOVER_WIDTH = 380;
 /** Approximate height used for viewport clamping before measuring. */
 const POPOVER_ESTIMATED_HEIGHT = 220;
 
-/** localStorage key remembering the translation service chosen in the card. */
-const PROVIDER_KEY = "bilingual-translation-provider";
-
 /** How long to wait for a translation before offering a retry. */
 const TRANSLATE_TIMEOUT_MS = 20000;
 
@@ -108,8 +105,8 @@ export const TranslatePopover = observer(function TranslatePopover(
   const [providers, setProviders] = React.useState<
     { id: string; label: string; configured: boolean }[]
   >([]);
-  const [providerId, setProviderId] = React.useState<string>(
-    () => translationProviderId() || localStorage.getItem(PROVIDER_KEY) || ""
+  const [providerId, setProviderId] = React.useState<string>(() =>
+    translationProviderId()
   );
   const [to, setTo] = React.useState<string>(() => translationTargetLang());
   const [copied, setCopied] = React.useState(false);

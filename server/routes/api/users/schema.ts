@@ -136,6 +136,8 @@ export const UsersUpdateSchema = BaseSchema.extend({
         ]),
         [UserPreference.BilingualAutoTranslate]: z.boolean(),
         [UserPreference.BilingualProofreading]: z.boolean(),
+        [UserPreference.BilingualTargetLang]: z.string().max(20),
+        [UserPreference.BilingualTranslationProvider]: z.string().max(300),
       })
       .partial()
       .optional(),

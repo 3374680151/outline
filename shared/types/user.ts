@@ -40,6 +40,10 @@ export enum UserPreference {
   BilingualAutoTranslate = "bilingualAutoTranslate",
   /** Whether selection-driven grammar checking (proofread mode) is enabled. */
   BilingualProofreading = "bilingualProofreading",
+  /** The target language used by the selection translate card. */
+  BilingualTargetLang = "bilingualTargetLang",
+  /** The translation service override used by the selection translate card. */
+  BilingualTranslationProvider = "bilingualTranslationProvider",
 }
 
 /** Styles of prefix that can be shown before headings. */
@@ -91,4 +95,6 @@ export type UserPreferences = {
   [UserPreference.BilingualTranslationTrigger]?: "dot" | "hover" | "off";
   [UserPreference.BilingualAutoTranslate]?: boolean;
   [UserPreference.BilingualProofreading]?: boolean;
+  [UserPreference.BilingualTargetLang]?: string;
+  [UserPreference.BilingualTranslationProvider]?: string;
 };

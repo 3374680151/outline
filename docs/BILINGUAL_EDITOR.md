@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| 版本 | v1.1（v1.0 设计定稿；v1.1 移除语法校对模块，见变更记录） |
-| 日期 | 2026-10-26（v1.1：2026-11-04） |
+| 版本 | v1.2（v1.1 移除语法校对模块；v1.2 配置整合，见变更记录） |
+| 日期 | 2026-10-26（v1.1：2026-11-04；v1.2：2026-11-05） |
 | 宿主项目 | Outline（`/Users/wang/worker/english/outline`） |
 | 参考仓库 A | FluentRead（`/Users/wang/Worker/english/FluentRead`）——划词翻译交互与服务商体系 |
 | 关联文档 | `docs/ARCHITECTURE.md`、FluentRead 本地报告 `docs/reports/web-version-feature-inventory-20261026.md` |
@@ -13,7 +13,8 @@
 > **变更记录**
 >
 > - 2026-10-31 定稿（v1.0）：整合需求基线与扩展能力取舍，含当时的语法校对模块（LanguageTool）设计。
-> - 2026-11-04（v1.1）：**语法校对模块整体移除**（LanguageTool sidecar、`grammar.*` API、`GrammarCheck` 编辑器扩展、`GrammarAssist` 面板、相关偏好与环境变量）。原因：语法纠错改由自定义 LLM 模型承担（FluentRead-Go proofread 模式，另行实现）。本文已同步删除相关章节与条目；§8 保留编号占位以维持后续章节引用。
+> - 2026-11-04（v1.1）：**语法校对模块整体移除**（LanguageTool sidecar、`grammar.*` API、`GrammarCheck` 编辑器扩展、`GrammarAssist` 面板、相关偏好与环境变量）。原因：语法纠错改由自定义 LLM 模型承担（FluentRead-Go proofread 模式，另行实现）。本文已同步删除相关章节与条目；§8 保留编号占位以维持后续章节引用。>
+> - 2026-11-05（v1.2）：**配置整合**。删除死配置（`BILINGUAL_EDITOR_ENABLED`、`TeamPreference.TranslationTrigger`、legacy localStorage 迁移）；设置页合并 —— `Settings → Models` 并入 `Settings → AI`（旧路径重定向），双语开关、翻译/校对绑定、模型网关、静态服务商凭据全部在单一页面；用户级目标语言与翻译服务商覆盖由 localStorage 迁入服务端用户偏好（跨设备）；`resolveChatChannel` 增补 `team_ai_configs` 兜底（校对可见 AI 页凭据）；翻译回退链尊重 `isDefault`「设为默认」。配置模型见 §4.4。
 
 ---
 
@@ -181,24 +182,38 @@ auto + EN 变化 + CN 文本 != autoText ──▶ stale（提示「英文已更
 - 重名问题：Outline 允许同名（urlId 唯一即可）；侧边栏、面包屑、搜索结果、文档列表统一渲染**语言徽标**（`EN` / `中`，纯文字徽标，见 §9.3）消歧。
 - 协作保存：两份文档各自走 Hocuspocus `PersistenceExtension` 自动落库（debounce 3s）——用户理解的「保存的时候保存成两份」在 Outline 语义下就是「创建时成对生成，之后各自实时保存」。
 
-### 4.4 TeamPreferences / 环境变量
+### 4.4 配置模型（v1.2 整合后）
 
-```ts
-// shared/types/team.ts — TeamPreference 新增
-BilingualEditor = "bilingualEditor",        // 工作区是否启用双语写作（默认 true）
-TranslationTrigger = "translationTrigger",  // "dot" | "selection" | "off"
-```
+配置分三层，**唯一管理入口是 `Settings → AI`**（`/settings/models` 已重定向至此）：
 
-（默认值加入 `shared/constants.ts` `TeamPreferenceDefaults`；对应设置页 §9.6。）
+**① 环境（env）** —— 自托管兜底与静态服务商默认值：
 
 ```bash
-# .env.example 新增
-TRANSLATION_PROVIDER_ORDER=openai-compatible,deepl,microsoft-free
-OPENAI_BASE_URL=            # OpenAI 兼容端点（也支持 deepseek 等）
+TRANSLATION_PROVIDER_ORDER=openai-compatible,deepl,microsoft-free  # 静态回退链顺序
+OPENAI_BASE_URL=            # OpenAI 兼容端点兜底（网关与 AI 页凭据均未配置时）
 OPENAI_API_KEY=
 OPENAI_TRANSLATION_MODEL=gpt-4o-mini
-DEEPL_API_KEY=              # deepL 官方 API（含 free :de 后缀key）
+DEEPL_API_KEY=              # deepL 官方 API（含 free :fx 后缀 key）
 ```
+
+**② 工作区（team）** —— 管理员在「AI 服务」页配置：
+
+- `TeamPreference.BilingualEditor`（默认 `true`）：双语编辑开关
+- `TeamPreference.TranslationModel` / `ProofreadModel`（`mp:{uuid}` 绑定）：翻译 / 校对绑定的模型网关，空 = 自动路由
+- 表 `team_model_providers`（+ `team_model_provider_models`）：任意协议模型网关（凭据加密存储、模型清单、连接测试）
+- 表 `team_ai_configs`：静态服务商凭据（`openai-compatible` / `deepl`），`isDefault` 将该服务商提到翻译回退链最前
+
+**③ 用户（user preference）** —— 个人偏好，跨设备同步（`app/utils/bilingual/prefs.ts` 统一读写）：
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `bilingualTranslationTrigger` | `off` | 划词翻译触发模式（off/dot/hover） |
+| `bilingualAutoTranslate` | `true` | 双语视图打开时自动翻译 |
+| `bilingualProofreading` | `false` | 纠错模式（选中即查）开关 |
+| `bilingualTargetLang` | `zh` | 划词翻译卡目标语言 |
+| `bilingualTranslationProvider` | `""` | 划词翻译卡服务商覆盖（空 = 自动） |
+
+**解析链（v1.2 统一后）**：校对 `resolveChatChannel` = 绑定网关 → 启用网关 → **AI 页 `openai-compatible` 凭据** → env 兜底；翻译 = 请求覆盖（用户偏好）→ 绑定网关 → 启用网关 → 默认静态服务商 → 静态回退链。已删除：`BILINGUAL_EDITOR_ENABLED` 环境变量、`TeamPreference.TranslationTrigger`（均无消费者）。
 
 ### 4.5 迁移
 
