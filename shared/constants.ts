@@ -109,6 +109,8 @@ export const TeamPreferenceDefaults: TeamPreferences = {
   [TeamPreference.PersonalDocs]: true,
   [TeamPreference.BilingualEditor]: true,
   [TeamPreference.TranslationTrigger]: "dot" as const,
+  [TeamPreference.TranslationModel]: "",
+  [TeamPreference.ProofreadModel]: "",
 };
 
 export const DocumentPreferenceDefaults: DocumentPreferences = {

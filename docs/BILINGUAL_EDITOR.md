@@ -347,9 +347,14 @@ Popover 的「写入中文段」：当前选区在 EN 块 `i` 内 → 直接把�
 
 ---
 
-## 8. 语法校对模块（已移除）
+## 8. 语法校对模块（v1.2 已按 FluentRead-Go proofread 模式重新实现）
 
-> v1.1：本章描述的 LanguageTool 集成已整体移除（sidecar、`grammar.*` API、`GrammarCheck` 编辑器扩展、问题卡与建议面板、相关偏好与 env）。语法纠错将由自定义 LLM 模型按 FluentRead-Go proofread 模式另行实现，届时另立设计文档。
+> v1.1：LanguageTool 集成移除，留位给自定义 LLM 纠错。**v1.2（2026-11-04）已实现**，方案为 FluentRead-Go proofread 模式移植：
+>
+> - **服务端**：`server/routes/api/proofread/`（`proofread.check`，限流 25/min，Redis 缓存按绑定的纠错模型分域，TTL 1h）+ `server/services/proofread/`（system prompt 移植 FluentRead-Go：只输出 JSON、original 必须逐字子串、类别枚举 spelling/grammar/punctuation/style/word_choice、教学理由、不整段重写；服务端逐条校验丢弃不合规建议；CJK 短路返回空）。
+> - **模型配置**：新表 `team_model_providers`（多供应商行，协议 openai/anthropic/gemini，密钥 AES 加密存 keyHint 尾 4 位）+ 协议适配层 `server/services/ai/adaptors/`（移植 FluentRead-Go adaptor，含 base URL 版本段检测、Anthropic 温度钳制、Gemini 安全档位）+ 设置页「模型供应商 / 模型绑定」（`aiModelProviders.*` API，测试连接/拉模型/启停；翻译与纠错经 TeamPreference `translationModel`/`proofreadModel` 分开绑定）。
+> - **编辑器**：`app/editor/extensions/Proofread.tsx`（选区工具条「Grammar check」项 + 文档头部按钮，无选区时检查光标所在顶层块；AllSelection 钳制到首块）+ `ProofreadPanel.tsx` 浮动面板（类别色标签、红删除线→绿建议、教学理由、逐条采纳/忽略；采纳 = 块内第一次出现处替换 + 600ms 高亮渐隐，剩余建议对更新后文本重新校验；全部处理完自动关闭并 toast）。
+> - 测试：`server/services/proofread/validate.test.ts`、`server/services/ai/adaptors/index.test.ts`、`app/utils/proofread/findFragment.test.ts`。
 
 ---
 

@@ -6,6 +6,10 @@ export { default as BilingualPair } from "./BilingualPair";
 
 export { default as TeamAiConfig } from "./TeamAiConfig";
 
+export { default as TeamModelProvider } from "./TeamModelProvider";
+
+export { default as TeamModelProviderModel } from "./TeamModelProviderModel";
+
 export { default as AuthenticationProvider } from "./AuthenticationProvider";
 
 export { default as Relationship } from "./Relationship";

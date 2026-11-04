@@ -21,6 +21,8 @@ import authenticationProviders from "./authenticationProviders";
 import batch from "./batch";
 import bilingual from "./bilingual/bilingual";
 import aiConfig from "./aiConfig/aiConfig";
+import modelProviders from "./aiConfig/modelProviders";
+import proofread from "./proofread/proofread";
 import collections from "./collections";
 import comments from "./comments/comments";
 import cron from "./cron";
@@ -128,7 +130,9 @@ router.use("/", reactions.routes());
 router.use("/", relationships.routes());
 router.use("/", bilingual.routes());
 router.use("/", aiConfig.routes());
+router.use("/", modelProviders.routes());
 router.use("/", translations.routes());
+router.use("/", proofread.routes());
 router.use("/", imports.routes());
 
 if (!env.isCloudHosted) {

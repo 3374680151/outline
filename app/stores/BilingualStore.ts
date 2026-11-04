@@ -353,6 +353,21 @@ class BilingualStore {
     this.translateSelectionHandled = true;
   });
 
+  /**
+   * Incremented whenever the header asks for the block at the cursor to be
+   * grammar-checked; the proofread extensions react to this counter.
+   */
+  @observable
+  proofreadRequest = 0;
+
+  /**
+   * Requests that the proofread extension checks the block at the current
+   * cursor position. Only the pane whose gate passes answers.
+   */
+  requestProofread = action(() => {
+    this.proofreadRequest += 1;
+  });
+
   registerEditor = action((documentId: string, view: EditorView) => {
     this.views.set(documentId, view);
   });

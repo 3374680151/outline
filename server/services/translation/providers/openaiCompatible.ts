@@ -24,7 +24,9 @@ const SYSTEM_PROMPT = [
  * @param content The raw model response content.
  * @returns The parsed JSON object, or null when none could be parsed.
  */
-function parseJsonObject(content: string): Record<string, unknown> | null {
+export function parseJsonObject(
+  content: string
+): Record<string, unknown> | null {
   const start = content.indexOf("{");
   const end = content.lastIndexOf("}");
 

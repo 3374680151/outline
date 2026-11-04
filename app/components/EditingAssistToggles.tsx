@@ -1,10 +1,11 @@
 import { observer } from "mobx-react";
-import { GlobeIcon } from "outline-icons";
+import { CheckmarkIcon, GlobeIcon } from "outline-icons";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Action } from "~/components/Actions";
 import Button from "~/components/Button";
 import Tooltip from "~/components/Tooltip";
+import BilingualStore from "~/stores/BilingualStore";
 import {
   setTranslationTrigger,
   translationTrigger,
@@ -40,6 +41,17 @@ export const EditingAssistToggles = observer(
 
     return (
       <>
+        <Action>
+          <Tooltip content={t("Grammar check")} side="bottom">
+            <AssistButton
+              aria-label={t("Grammar check")}
+              onClick={() => BilingualStore.requestProofread()}
+              icon={<CheckmarkIcon />}
+              borderOnHover
+              neutral
+            />
+          </Tooltip>
+        </Action>
         <Action>
           <Tooltip
             content={`${t("Word translation")}: ${triggerLabel}`}

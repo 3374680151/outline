@@ -71,6 +71,10 @@ export enum TeamPreference {
   BilingualEditor = "bilingualEditor",
   /** When the translation dot should appear while editing. */
   TranslationTrigger = "translationTrigger",
+  /** The model provider used for LLM translation; empty means automatic. */
+  TranslationModel = "translationModel",
+  /** The model provider used for LLM proofreading; empty means automatic. */
+  ProofreadModel = "proofreadModel",
 }
 
 /** Workspace preference values, keyed by preference. */
@@ -92,4 +96,6 @@ export type TeamPreferences = {
   [TeamPreference.PersonalDocs]?: boolean;
   [TeamPreference.BilingualEditor]?: boolean;
   [TeamPreference.TranslationTrigger]?: "dot" | "hover" | "off";
+  [TeamPreference.TranslationModel]?: string;
+  [TeamPreference.ProofreadModel]?: string;
 };

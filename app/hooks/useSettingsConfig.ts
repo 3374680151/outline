@@ -17,6 +17,7 @@ import {
   InternetIcon,
   SmileyIcon,
   BrowserIcon,
+  DatabaseIcon,
 } from "outline-icons";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -38,6 +39,7 @@ const Authentication = lazy(() => import("~/scenes/Settings/Authentication"));
 const Details = lazy(() => import("~/scenes/Settings/Details"));
 const Export = lazy(() => import("~/scenes/Settings/Export"));
 const Groups = lazy(() => import("~/scenes/Settings/Groups"));
+const Models = lazy(() => import("~/scenes/Settings/Models"));
 const Import = lazy(() => import("~/scenes/Settings/Import"));
 const Integrations = lazy(() => import("~/scenes/Settings/Integrations"));
 const Users = lazy(() => import("~/scenes/Settings/Users"));
@@ -179,6 +181,15 @@ const useSettingsConfig = () => {
         enabled: can.update,
         group: t("Workspace"),
         icon: SmileyIcon,
+      },
+      {
+        name: t("Models"),
+        path: settingsPath("models"),
+        component: Models.Component,
+        preload: Models.preload,
+        enabled: can.update,
+        group: t("Workspace"),
+        icon: DatabaseIcon,
       },
       {
         name: t("AI"),

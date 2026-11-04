@@ -43,6 +43,7 @@ import DocumentTitle from "./DocumentTitle";
 import type { MirrorEngine } from "~/utils/bilingual/mirrorEngine";
 import BilingualMirrorExtension from "~/editor/extensions/BilingualMirror";
 import HoverTranslateExtension from "~/editor/extensions/HoverTranslate";
+import ProofreadExtension from "~/editor/extensions/Proofread";
 import { useBilingualPair } from "~/components/BilingualPairProvider";
 import { first } from "es-toolkit/compat";
 import useShare from "@shared/hooks/useShare";
@@ -252,6 +253,9 @@ function DocumentEditor(props: Props) {
         gate: () => bilingualStateRef.current.side !== "target",
         onInsertText: (blockIndex: number, text: string) =>
           bilingualStateRef.current.engine?.forceWrite(blockIndex, text),
+      }),
+      new ProofreadExtension({
+        gate: () => bilingualStateRef.current.side !== "target",
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps

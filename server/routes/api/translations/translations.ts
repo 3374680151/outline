@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import Router from "@koa/router";
 import { Day } from "@shared/utils/time";
+import { TeamPreference } from "@shared/types";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import validate from "@server/middlewares/validate";
 import Logger from "@server/logging/Logger";
+import { Team } from "@server/models";
 import { CacheHelper } from "@server/utils/CacheHelper";
 import { InvalidRequestError, InternalError } from "@server/errors";
 import type { APIContext } from "@server/types";
@@ -93,7 +95,17 @@ router.post(
     }
 
     const team = await loadTeamTranslationConfig(user.teamId);
-    const provider = getConfiguredProvider(providerId, team);
+    const teamRow = await Team.findByPk(user.teamId, { rejectOnEmpty: true });
+
+    // Explicit provider from the request wins, then the workspace's bound
+    // translation model, then the configured fallback chain.
+    const binding = teamRow.getPreference(TeamPreference.TranslationModel);
+    const provider =
+      getConfiguredProvider(providerId, team) ??
+      getConfiguredProvider(
+        typeof binding === "string" && binding ? binding : undefined,
+        team
+      );
 
     if (providerId && !provider) {
       throw InvalidRequestError(

@@ -8,14 +8,54 @@ import type {
 } from "./types";
 import deepl from "./providers/deepl";
 import microsoftFree from "./providers/microsoftFree";
+import {
+  MODEL_PROVIDER_ID_PREFIX,
+  modelProviderTranslationProvider,
+} from "./providers/modelProvider";
 import openaiCompatible from "./providers/openaiCompatible";
 
-/** All known providers by id. */
-const PROVIDERS: Record<string, TranslationProvider> = {
+/** All known static providers by id. */
+const STATIC_PROVIDERS: Record<string, TranslationProvider> = {
   "openai-compatible": openaiCompatible,
   deepl,
   "microsoft-free": microsoftFree,
 };
+
+/**
+ * Builds the translation providers backed by the workspace's enabled model
+ * gateways, in configuration order.
+ *
+ * @param team The workspace AI configuration, when available.
+ * @returns The model gateway providers.
+ */
+function modelProviders(
+  team?: TeamTranslationConfig | null
+): TranslationProvider[] {
+  return (team?.modelProviders ?? []).map((mp) =>
+    modelProviderTranslationProvider(mp)
+  );
+}
+
+/**
+ * Finds a provider by id across the static registry and the workspace's
+ * model gateways.
+ *
+ * @param id The provider id.
+ * @param team The workspace AI configuration, when available.
+ * @returns The provider, or undefined when unknown.
+ */
+function findProvider(
+  id: string,
+  team?: TeamTranslationConfig | null
+): TranslationProvider | undefined {
+  if (id.startsWith(MODEL_PROVIDER_ID_PREFIX)) {
+    const mpId = id.slice(MODEL_PROVIDER_ID_PREFIX.length);
+    const mp = team?.modelProviders.find((entry) => entry.id === mpId);
+    return mp ? modelProviderTranslationProvider(mp) : undefined;
+  }
+
+  return STATIC_PROVIDERS[id];
+}
 
 /** Per-provider cooldown until timestamp after a failure, in epoch ms. */
 const cooldowns = new Map<string, number>();
@@ -26,7 +66,8 @@ const COOLDOWN_MS = 60000;
 /**
  * Returns the providers in the configured order that currently have
  * credentials, skipping providers in their failure cooldown unless all of
- * them are cooling down. The workspace's preferred provider is tried first.
+ * them are cooling down. The workspace's model gateways are tried first,
+ * then the static chain in the configured order.
  *
  * @param team The workspace AI configuration, when available.
  * @returns The candidate providers for a translation attempt.
@@ -38,18 +79,13 @@ function candidates(
     .map((id) => id.trim())
     .filter(Boolean);
 
-  const ids = team?.defaultProviderId
-    ? [
-        team.defaultProviderId,
-        ...order.filter((id) => id !== team.defaultProviderId),
-      ]
-    : order;
+  const staticList = order
+    .map((id) => STATIC_PROVIDERS[id])
+    .filter((provider) => provider !== undefined);
 
-  const configured = ids
-    .map((id) => PROVIDERS[id])
-    .filter((provider) =>
-      provider?.isConfigured(team?.configs.get(provider.id))
-    );
+  const configured = [...modelProviders(team), ...staticList].filter(
+    (provider) => provider.isConfigured(team?.configs.get(provider.id))
+  );
 
   const now = Date.now();
   const ready = configured.filter(
@@ -120,7 +156,7 @@ export async function translateWithFallback(
 
 /**
  * Lists the configured providers for the settings UI. No credentials are
- * exposed, only availability.
+ * exposed, only availability. Workspace model gateways come first.
  *
  * @param team The workspace AI configuration, when available.
  * @returns Provider descriptors in fallback order.
@@ -131,12 +167,21 @@ export function listProviders(team?: TeamTranslationConfig | null): {
   configured: boolean;
   isDefault: boolean;
 }[] {
-  return Object.values(PROVIDERS).map((provider) => ({
+  const dynamic = modelProviders(team).map((provider) => ({
+    id: provider.id,
+    label: provider.label,
+    configured: provider.isConfigured(undefined),
+    isDefault: false,
+  }));
+
+  const staticList = Object.values(STATIC_PROVIDERS).map((provider) => ({
     id: provider.id,
     label: provider.label,
     configured: provider.isConfigured(team?.configs.get(provider.id)),
     isDefault: team?.defaultProviderId === provider.id,
   }));
+
+  return [...dynamic, ...staticList];
 }
 
 /**
@@ -154,7 +199,7 @@ export function getConfiguredProvider(
     return undefined;
   }
 
-  const provider = PROVIDERS[id];
+  const provider = findProvider(id, team);
   return provider?.isConfigured(team?.configs.get(provider.id))
     ? provider
     : undefined;

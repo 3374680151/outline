@@ -39,12 +39,33 @@ export interface TeamProviderConfig {
   model?: string | null;
 }
 
+/**
+ * An enabled workspace model gateway with its credentials already decrypted.
+ * Each row of `team_model_providers` becomes one entry.
+ */
+export interface TeamModelProviderConfig {
+  /** The provider row id. */
+  id: string;
+  /** The display name. */
+  name: string;
+  /** The wire protocol. */
+  protocol: string;
+  /** The endpoint base URL. */
+  baseUrl: string;
+  /** The decrypted API key. */
+  apiKey: string;
+  /** The default model name, when set. */
+  model: string | null;
+}
+
 /** The AI service configuration of one workspace. */
 export interface TeamTranslationConfig {
   /** Per-provider overrides by provider id. */
   configs: Map<string, TeamProviderConfig>;
   /** The provider the workspace marked as its preferred one, if any. */
   defaultProviderId?: string | null;
+  /** The enabled model gateways, tried before the static provider chain. */
+  modelProviders: TeamModelProviderConfig[];
 }
 
 /** A single translation service. */

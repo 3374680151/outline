@@ -21,6 +21,7 @@ import {
   TableSplitCellsIcon,
   PaletteIcon,
   CollapseIcon,
+  CheckmarkIcon,
 } from "outline-icons";
 import { v4 as uuidv4 } from "uuid";
 import CellBackgroundColorPicker from "../components/CellBackgroundColorPicker";
@@ -88,6 +89,19 @@ export default function formattingMenuItems(ctx: SelectionContext): MenuItem[] {
         "background"
       )
     : false;
+
+  // Grammar checking only makes sense for text containing latin script; the
+  // server skips pure CJK text anyway, so hide the entry for it.
+  const hasLatinSelection =
+    !isEmpty &&
+    !ctx.readOnly &&
+    /[A-Za-z]/.test(
+      state.doc.textBetween(
+        state.selection.from,
+        Math.min(state.selection.to, state.selection.from + 5000),
+        " "
+      )
+    );
 
   const selectedCellsColorSet = getColorSetForSelectedCells(state.selection);
   const canFormat = !isInCodeBlock;
@@ -489,6 +503,13 @@ export default function formattingMenuItems(ctx: SelectionContext): MenuItem[] {
         { resolved: false },
         { exact: true }
       ),
+    },
+    {
+      name: "proofread",
+      group: MenuItemGroup.inline,
+      tooltip: t("Grammar check"),
+      icon: <CheckmarkIcon />,
+      visible: hasLatinSelection,
     },
     {
       name: "separator",
