@@ -52,8 +52,11 @@ async function build() {
   // Compile server, shared and plugins in a single SWC process, as process
   // startup costs far more than the compilation itself.
   console.log("Compiling…");
+
+  // Invoke the CLI through Node directly so it works on both Unix shells and
+  // Windows cmd, which cannot execute the extensionless .bin shim.
   await execAsync(
-    `node_modules/.bin/swc ./server ./shared ./plugins -d ./build --extensions .ts,.tsx --ignore "**/*.test.ts,**/*.test.tsx,**/__mocks__/**,plugins/*/client/**" --quiet`
+    `node node_modules/@swc/cli/bin/swc.js ./server ./shared ./plugins -d ./build --extensions .ts,.tsx --ignore "**/*.test.ts,**/*.test.tsx,**/__mocks__/**,plugins/*/client/**" --quiet`
   );
 
   // Copy static files
@@ -71,11 +74,18 @@ async function build() {
     execAsync("cp package.json ./build"),
     execAsync("cp -R ./shared/i18n/locales ./build/shared/i18n"),
     execAsync("cp -R ./server/data ./build/server/data"),
-    ...d.map(async (plugin) =>
-      execAsync(
-        `mkdir -p ./build/plugins/${plugin} && cp ./plugins/${plugin}/plugin.json ./build/plugins/${plugin}/plugin.json 2>/dev/null || :`
-      )
-    ),
+    // Copy each plugin manifest with Node APIs: the shell fallback idiom
+    // (`2>/dev/null || :`) is not portable to Windows cmd.
+    ...d.map(async (plugin) => {
+      const dir = path.join("build", "plugins", plugin);
+      mkdirSync(dir, { recursive: true });
+
+      const source = path.join("plugins", plugin, "plugin.json");
+
+      if (existsSync(source)) {
+        copyFileSync(source, path.join(dir, "plugin.json"));
+      }
+    }),
   ]);
 
   console.log("Done!");

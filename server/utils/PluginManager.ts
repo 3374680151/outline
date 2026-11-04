@@ -164,8 +164,10 @@ export class PluginManager {
     }
     const rootDir = env.ENVIRONMENT === "test" ? "" : "build";
 
+    // The pattern must use forward slashes: glob treats backslashes as
+    // escape characters, which matches nothing on Windows.
     glob
-      .sync(path.join(rootDir, "plugins/*/server/index.[jt]s"))
+      .sync(`${rootDir}/plugins/*/server/index.[jt]s`)
       .forEach((filePath: string) => {
         try {
           // oxlint-disable-next-line typescript/no-require-imports -- path is only known at runtime
