@@ -1,12 +1,14 @@
 import { observer } from "mobx-react";
 import { CheckmarkIcon, GlobeIcon } from "outline-icons";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import styled from "styled-components";
 import { Action } from "~/components/Actions";
 import Button from "~/components/Button";
 import Tooltip from "~/components/Tooltip";
-import BilingualStore from "~/stores/BilingualStore";
 import {
+  proofreadingEnabled,
+  setProofreadingEnabled,
   setTranslationTrigger,
   translationTrigger,
 } from "~/utils/bilingual/prefs";
@@ -24,12 +26,24 @@ export const EditingAssistToggles = observer(
     const { t } = useTranslation();
     const trigger = translationTrigger();
     const translateOn = trigger !== "off";
+    const proofreadOn = proofreadingEnabled();
 
     const handleTranslateToggle = () => {
       // The button is a quick on/off switch: an active trigger returns to
       // the default dot mode, and the hover mode stays selectable through
       // the bilingual toolbar menu and the settings page.
       setTranslationTrigger(translateOn ? "off" : "dot");
+    };
+
+    const handleProofreadToggle = () => {
+      const next = !proofreadOn;
+      setProofreadingEnabled(next);
+
+      if (next) {
+        toast.message(
+          t("Proofread mode on: select a paragraph to check it")
+        );
+      }
     };
 
     const triggerLabel =
@@ -42,10 +56,17 @@ export const EditingAssistToggles = observer(
     return (
       <>
         <Action>
-          <Tooltip content={t("Grammar check")} side="bottom">
+          <Tooltip
+            content={`${t("Grammar check")}: ${
+              proofreadOn ? t("On") : t("Off")
+            }`}
+            side="bottom"
+          >
             <AssistButton
+              $on={proofreadOn}
+              aria-pressed={proofreadOn}
               aria-label={t("Grammar check")}
-              onClick={() => BilingualStore.requestProofread()}
+              onClick={handleProofreadToggle}
               icon={<CheckmarkIcon />}
               borderOnHover
               neutral

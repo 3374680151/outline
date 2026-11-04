@@ -135,6 +135,7 @@ export const UsersUpdateSchema = BaseSchema.extend({
           "off",
         ]),
         [UserPreference.BilingualAutoTranslate]: z.boolean(),
+        [UserPreference.BilingualProofreading]: z.boolean(),
       })
       .partial()
       .optional(),

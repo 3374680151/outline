@@ -13,23 +13,35 @@ import Text from "~/components/Text";
 /** Presentation state of the panel. */
 export type ProofreadPanelState = "loading" | "done" | "error";
 
+/** One suggestion shown in the panel, tagged with its source block. */
+export interface ProofreadPanelEntry {
+  /** Stable key for React rendering and focus highlighting. */
+  key: string;
+  /** The 0-based index of the block the suggestion came from. */
+  blockIndex: number;
+  /** The validated suggestion. */
+  suggestion: ProofreadSuggestion;
+}
+
 /** Props for the proofread suggestion panel. */
 export interface ProofreadPanelProps {
   /** Whether the check is running, finished, or failed. */
   status: ProofreadPanelState;
   /** The validated suggestions, shown as cards. */
-  suggestions: ProofreadSuggestion[];
+  entries: ProofreadPanelEntry[];
   /** Error message when status is "error". */
   error?: string;
   /** Whether no proofread model is configured for the workspace. */
   unconfigured?: boolean;
-  /** The 1-based index of the block being checked, for the title. */
-  blockIndex: number;
+  /** The key of the entry to highlight and scroll into view, if any. */
+  activeKey?: string | null;
+  /** Whether each card shows the block number it came from. */
+  showBlock?: boolean;
   /** Applies one suggestion to the source text. */
-  onAccept: (suggestion: ProofreadSuggestion) => void;
+  onAccept: (entry: ProofreadPanelEntry) => void;
   /** Dismisses one suggestion without changing the text. */
-  onIgnore: (suggestion: ProofreadSuggestion) => void;
-  /** Re-runs the check for the same block. */
+  onIgnore: (entry: ProofreadPanelEntry) => void;
+  /** Re-runs the check that produced the panel content. */
   onRetry: () => void;
   /** Closes the panel. */
   onClose: () => void;
@@ -66,16 +78,18 @@ const CATEGORY_META: Record<
 };
 
 /**
- * Floating panel listing the proofread suggestions for one block, following
- * the FluentRead-Go proofread design: category tag, verbatim fragment with
- * the fix, a teaching reason, and per-item accept/ignore.
+ * Floating panel listing proofread suggestions, following the FluentRead-Go
+ * proofread design: category tag, verbatim fragment with the fix, a teaching
+ * reason, and per-item accept/ignore. Entries may come from one block (a
+ * selection or manual check) or from several blocks (the summary panel).
  */
 export const ProofreadPanel = observer(function ProofreadPanel({
   status,
-  suggestions,
+  entries,
   error,
   unconfigured,
-  blockIndex,
+  activeKey,
+  showBlock,
   onAccept,
   onIgnore,
   onRetry,
@@ -119,7 +133,15 @@ export const ProofreadPanel = observer(function ProofreadPanel({
     >
       <Header>
         <Title>
-          {t("Grammar check")} · {t("block {{index}}", { index: blockIndex })}
+          {t("Grammar check")}
+          {entries.length > 0 && (
+            <>
+              {" · "}
+              {t("{{count}} issues", {
+                count: entries.length,
+              })}
+            </>
+          )}
         </Title>
         <CloseButton
           type="button"
@@ -160,7 +182,7 @@ export const ProofreadPanel = observer(function ProofreadPanel({
 
         {status === "done" &&
           !unconfigured &&
-          suggestions.length === 0 && (
+          entries.length === 0 && (
             <EmptyBox>
               <OkIconWrap>
                 <CheckmarkIcon size={16} color="currentColor" />
@@ -169,10 +191,12 @@ export const ProofreadPanel = observer(function ProofreadPanel({
             </EmptyBox>
           )}
 
-        {suggestions.map((suggestion) => (
+        {entries.map((entry) => (
           <SuggestionCard
-            key={`${suggestion.original}→${suggestion.suggestion}`}
-            suggestion={suggestion}
+            key={entry.key}
+            entry={entry}
+            active={activeKey === entry.key}
+            showBlock={showBlock}
             onAccept={onAccept}
             onIgnore={onIgnore}
           />
@@ -184,28 +208,53 @@ export const ProofreadPanel = observer(function ProofreadPanel({
 
 /** One suggestion card with the category tag, diff, and reason. */
 const SuggestionCard = observer(function SuggestionCard({
-  suggestion,
+  entry,
+  active,
+  showBlock,
   onAccept,
   onIgnore,
 }: {
-  suggestion: ProofreadSuggestion;
-  onAccept: (suggestion: ProofreadSuggestion) => void;
-  onIgnore: (suggestion: ProofreadSuggestion) => void;
+  entry: ProofreadPanelEntry;
+  active: boolean;
+  showBlock?: boolean;
+  onAccept: (entry: ProofreadPanelEntry) => void;
+  onIgnore: (entry: ProofreadPanelEntry) => void;
 }) {
   const { t } = useTranslation();
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const suggestion = entry.suggestion;
   const meta = CATEGORY_META[suggestion.category];
 
+  // Bring the highlighted entry into view; used when an underline in the
+  // text opens the panel.
+  React.useEffect(() => {
+    if (active) {
+      ref.current?.scrollIntoView({
+        block: "nearest",
+      });
+    }
+  }, [active]);
+
   const handleAccept = React.useCallback(() => {
-    onAccept(suggestion);
-  }, [onAccept, suggestion]);
+    onAccept(entry);
+  }, [onAccept, entry]);
 
   const handleIgnore = React.useCallback(() => {
-    onIgnore(suggestion);
-  }, [onIgnore, suggestion]);
+    onIgnore(entry);
+  }, [onIgnore, entry]);
 
   return (
-    <Card>
-      <CategoryTag color={meta.color}>{t(meta.label)}</CategoryTag>
+    <Card ref={ref} $active={active}>
+      <CardMeta>
+        <CategoryTag color={meta.color}>{t(meta.label)}</CategoryTag>
+        {showBlock && (
+          <BlockTag>
+            {t("block {{index}}", {
+              index: entry.blockIndex + 1,
+            })}
+          </BlockTag>
+        )}
+      </CardMeta>
       <Diff>
         <Original>{suggestion.original}</Original>
         <Arrow>→</Arrow>
@@ -348,12 +397,19 @@ const OkIconWrap = styled.span`
   display: flex;
 `;
 
-const Card = styled.div`
-  border: 1px solid ${s("divider")};
+const Card = styled.div<{ $active?: boolean }>`
+  border: 1px solid
+    ${(props) => (props.$active ? props.theme.accent : s("divider"))};
   border-radius: 8px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+`;
+
+const CardMeta = styled.div`
+  display: flex;
+  align-items: center;
   gap: 6px;
 `;
 
@@ -365,6 +421,11 @@ const CategoryTag = styled.span<{ color: keyof DefaultTheme }>`
   padding: 1px 6px;
   color: #fff;
   background: ${(props) => s(props.color)(props)};
+`;
+
+const BlockTag = styled.span`
+  font-size: 11px;
+  color: ${s("textTertiary")};
 `;
 
 const Diff = styled.div`

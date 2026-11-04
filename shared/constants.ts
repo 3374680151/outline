@@ -130,4 +130,5 @@ export const UserPreferenceDefaults: UserPreferences = {
   // predates that decision.
   [UserPreference.BilingualTranslationTrigger]: "off" as const,
   [UserPreference.BilingualAutoTranslate]: true,
+  [UserPreference.BilingualProofreading]: false,
 };

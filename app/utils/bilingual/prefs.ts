@@ -131,6 +131,29 @@ export function setAutoTranslateOnOpen(enabled: boolean): void {
   scheduleUserSave();
 }
 
+/**
+ * Whether selection-driven grammar checking (proofread mode) is enabled.
+ *
+ * @returns True when the user turned the mode on from the document header.
+ */
+export function proofreadingEnabled(): boolean {
+  return (
+    currentUser()?.getPreference(UserPreference.BilingualProofreading) ?? false
+  );
+}
+
+/**
+ * Persists the proofread mode toggle.
+ *
+ * @param enabled Whether selection-driven grammar checking should be active.
+ */
+export function setProofreadingEnabled(enabled: boolean): void {
+  const user = currentUser();
+  user?.setPreference(UserPreference.BilingualProofreading, enabled);
+  bumpPrefsVersion();
+  scheduleUserSave();
+}
+
 const TRANSLATION_TARGET_LANG_KEY = "bilingual-translation-target-lang";
 const TRANSLATION_PROVIDER_KEY = "bilingual-translation-provider";
 

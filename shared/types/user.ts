@@ -38,6 +38,8 @@ export enum UserPreference {
   BilingualTranslationTrigger = "bilingualTranslationTrigger",
   /** Whether opening the bilingual view translates document content automatically. */
   BilingualAutoTranslate = "bilingualAutoTranslate",
+  /** Whether selection-driven grammar checking (proofread mode) is enabled. */
+  BilingualProofreading = "bilingualProofreading",
 }
 
 /** Styles of prefix that can be shown before headings. */
@@ -88,4 +90,5 @@ export type UserPreferences = {
   [UserPreference.SidebarSectionOrder]?: SidebarSection[];
   [UserPreference.BilingualTranslationTrigger]?: "dot" | "hover" | "off";
   [UserPreference.BilingualAutoTranslate]?: boolean;
+  [UserPreference.BilingualProofreading]?: boolean;
 };
